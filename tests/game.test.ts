@@ -18,6 +18,7 @@ import {
 import { createCrashEffect, getCrashProgress } from '../lib/crash-effects';
 import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
 import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering } from '../lib/aircraft-performance';
+import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from '../lib/landing-sequence';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -159,6 +160,34 @@ describe('Collision feedback', () => {
     expect(getCrashProgress(crash)).toBe(0);
     crash.elapsed = crash.duration * 2;
     expect(getCrashProgress(crash)).toBe(1);
+  });
+});
+
+describe('Staged landing sequence', () => {
+  it('shows final approach, flare, touchdown, braking and taxi rather than a short disappearance', () => {
+    expect(getLandingSequence('jet', 0.08).stage).toBe('finalApproach');
+    expect(getLandingSequence('jet', 0.30).stage).toBe('flare');
+    expect(getLandingSequence('jet', 0.44).stage).toBe('touchdown');
+    expect(getLandingSequence('jet', 0.66).stage).toBe('braking');
+    expect(getLandingSequence('jet', 0.94).stage).toBe('taxiOut');
+  });
+
+  it('gives fast, large aircraft visibly more runway time than smaller aircraft', () => {
+    expect(getLandingDuration('supersonic')).toBeGreaterThan(getLandingDuration('jet'));
+    expect(getLandingDuration('jet')).toBeGreaterThan(getLandingDuration('propeller'));
+    expect(getLandingDuration('propeller')).toBeGreaterThan(getLandingDuration('helicopter'));
+  });
+
+  it('only emits tyre smoke during the moment of touchdown', () => {
+    expect(getLandingSequence('jet', 0.42).tyreSmoke).toBe(true);
+    expect(getLandingSequence('jet', 0.16).tyreSmoke).toBe(false);
+    expect(getLandingSequence('jet', 0.70).tyreSmoke).toBe(false);
+  });
+
+  it('uses hover approach and descent phases for helicopter H1 landings', () => {
+    expect(getLandingStageAtElapsed('helicopter', 0.4).stage).toBe('hoverApproach');
+    expect(getLandingStageAtElapsed('helicopter', 2.4).stage).toBe('hoverDescent');
+    expect(getLandingStageAtElapsed('helicopter', 3.5).stage).toBe('helipadSettle');
   });
 });
 

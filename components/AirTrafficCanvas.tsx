@@ -27,6 +27,7 @@ import {
 import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/crash-effects';
 import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
+import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -301,20 +302,29 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     for (let i = planes.length - 1; i >= 0; i--) {
       const p = planes[i];
 
-      // Landing animation sequence
+      // Staged landing sequence: final approach blends into the threshold, followed by
+      // flare, tyre contact, braking, and taxi-out instead of instant runway teleportation.
       if (p.isLanding) {
-        // A longer decelerating rollout reads as a landing, rather than an instant disappearance.
-        p.landingProgress += dt * 0.42;
-        p.speed = Math.max(6, p.speed * (1 - dt * 1.15));
-
-        // Follow runway centerline to completion
+        p.landingProgress = Math.min(1, p.landingProgress + dt / getLandingDuration(p.type));
+        const landing = getLandingSequence(p.type, p.landingProgress);
         const targetRunway = getAssignedRunway(p.type, runways);
         if (targetRunway) {
-          const rollout = 1 - Math.pow(1 - Math.min(p.landingProgress, 1), 2);
-          const rx = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * rollout;
-          const ry = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * rollout;
-          p.x = rx;
-          p.y = ry;
+          const entry = p.landingEntry ?? { x: p.x, y: p.y };
+          p.landingEntry = entry;
+          p.landingEntrySpeed ??= p.speed;
+          p.speed = p.landingEntrySpeed * landing.speedFactor;
+          p.heading = targetRunway.heading;
+
+          if (targetRunway.type === 'helipad') {
+            p.x = entry.x + (targetRunway.startX - entry.x) * landing.approachBlend;
+            p.y = entry.y + (targetRunway.startY - entry.y) * landing.approachBlend;
+          } else if (landing.approachBlend < 0.999) {
+            p.x = entry.x + (targetRunway.startX - entry.x) * landing.approachBlend;
+            p.y = entry.y + (targetRunway.startY - entry.y) * landing.approachBlend;
+          } else {
+            p.x = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * landing.runwayProgress;
+            p.y = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * landing.runwayProgress;
+          }
         }
 
         if (p.landingProgress >= 1) {
@@ -378,6 +388,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           p.isLanding = true;
           p.path = [];
           p.heading = assignedRunway.heading;
+          p.landingEntry = { x: p.x, y: p.y };
+          p.landingEntrySpeed = p.speed;
         }
       }
 
@@ -838,7 +850,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // 5. Draw Aircraft Sprites
     planesRef.current.forEach(p => {
       const def = AIRCRAFT_DEFS[p.type];
-      const scale = p.isLanding ? Math.max(0.4, 1 - p.landingProgress * 0.5) : 1;
+      const landing = p.isLanding ? getLandingSequence(p.type, p.landingProgress) : null;
+      // Aircraft no longer shrinks away during landing. A subtle descent-scale cue only
+      // applies while it is still above the runway, then returns to full ground scale.
+      const scale = landing ? 0.95 + (1 - landing.altitude / 12) * 0.05 : 1;
 
       // Fine vapour trail is visible only during flight; it disappears during runway rollout.
       if (!p.isLanding && p.type !== 'helicopter') {
@@ -883,15 +898,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.stroke();
       }
 
-      // Soft ground shadow gives the silhouette altitude and direction.
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+      // The shadow closes toward the wheels as the aircraft descends through flare.
+      const altitude = landing?.altitude ?? 0;
+      const shadowAlpha = 0.20 + (1 - Math.min(1, altitude / 12)) * 0.16;
+      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
       ctx.beginPath();
-      ctx.ellipse(4, 6, def.length * 0.42, def.wingspan * 0.30, 0, 0, Math.PI * 2);
+      ctx.ellipse(-altitude * 0.4, 6 + altitude * 0.55, def.length * 0.42, def.wingspan * 0.30, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Brief tyre smoke at touchdown: it dissipates as the aircraft rolls out.
-      if (p.isLanding && p.landingProgress < 0.52) {
-        const smokeAlpha = (0.52 - p.landingProgress) * 0.45;
+      // Tyre smoke only appears right after contact, not throughout the runway sequence.
+      if (landing?.tyreSmoke) {
+        const smokeAlpha = 0.28 + Math.sin(Date.now() * 0.025) * 0.08;
         for (let smoke = 0; smoke < 3; smoke += 1) {
           ctx.fillStyle = `rgba(210, 224, 232, ${Math.max(0, smokeAlpha - smoke * 0.05)})`;
           ctx.beginPath();
@@ -1111,8 +1128,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Gear deploys for rollout and rolls along the centreline.
-      if (p.isLanding && p.type !== 'helicopter') {
+      // Gear appears during final approach and remains down through taxi-out.
+      if (landing?.gearDown && p.type !== 'helicopter') {
         ctx.strokeStyle = '#1d2830';
         ctx.lineWidth = 2;
         [-7, 5].forEach((wheelX) => {
@@ -1125,6 +1142,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           ctx.arc(wheelX - 2, 8, 2.2, 0, Math.PI * 2);
           ctx.fill();
         });
+        if (landing.brakeGlow) {
+          ctx.strokeStyle = `rgba(255, 135, 61, ${0.38 + Math.sin(Date.now() * 0.03) * 0.18})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(-2, 7, 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
       // Selected ring
@@ -1162,6 +1186,18 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.fillText(routeLabel, p.x, tagY + 11.5);
+      if (landing) {
+        ctx.font = '800 8px -apple-system, system-ui, sans-serif';
+        const phaseWidth = ctx.measureText(landing.label).width + 10;
+        ctx.fillStyle = landing.stage === 'touchdown'
+          ? 'rgba(255, 179, 0, 0.94)'
+          : landing.stage === 'braking'
+            ? 'rgba(255, 97, 97, 0.94)'
+            : 'rgba(0, 229, 255, 0.90)';
+        ctx.fillRect(p.x - phaseWidth / 2, tagY + 18, phaseWidth, 13);
+        ctx.fillStyle = '#07121d';
+        ctx.fillText(landing.label, p.x, tagY + 27.5);
+      }
       ctx.restore();
     });
 

@@ -28,6 +28,7 @@ import {
 } from '@/lib/approach-routing';
 import { getAssignedRunway } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
+import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -141,8 +142,9 @@ export function AirTrafficCanvas({
         const next = previous.flatMap((plane) => {
           const assignedRunway = getAssignedRunway(plane.type, runways);
           if (plane.isLanding && assignedRunway) {
-            const landingProgress = Math.min(1, plane.landingProgress + 0.06);
-            const rollout = 1 - Math.pow(1 - landingProgress, 2);
+            const landingProgress = Math.min(1, plane.landingProgress + 0.06 / getLandingDuration(plane.type));
+            const landing = getLandingSequence(plane.type, landingProgress);
+            const entry = plane.landingEntry ?? { x: plane.x, y: plane.y };
             if (landingProgress >= 1) {
               landingsRef.current += 1;
               scoreRef.current += AIRCRAFT_DEFS[plane.type].scoreValue;
@@ -157,8 +159,14 @@ export function AirTrafficCanvas({
               ...plane,
               heading: assignedRunway.heading,
               landingProgress,
-              x: assignedRunway.startX + (assignedRunway.endX - assignedRunway.startX) * rollout,
-              y: assignedRunway.startY + (assignedRunway.endY - assignedRunway.startY) * rollout,
+              landingEntry: entry,
+              landingEntrySpeed: plane.landingEntrySpeed ?? plane.speed,
+              x: assignedRunway.type === 'helipad' || landing.approachBlend < 0.999
+                ? entry.x + (assignedRunway.startX - entry.x) * landing.approachBlend
+                : assignedRunway.startX + (assignedRunway.endX - assignedRunway.startX) * landing.runwayProgress,
+              y: assignedRunway.type === 'helipad' || landing.approachBlend < 0.999
+                ? entry.y + (assignedRunway.startY - entry.y) * landing.approachBlend
+                : assignedRunway.startY + (assignedRunway.endY - assignedRunway.startY) * landing.runwayProgress,
             }];
           }
 
@@ -186,7 +194,15 @@ export function AirTrafficCanvas({
 
           const runway = getAssignedRunway(moved.type, runways);
           if (runway && plane.path.length > 0 && isInsideAutoLandingCapture(moved, runway)) {
-            return [{ ...moved, isLanding: true, landingProgress: 0, path: [], heading: runway.heading }];
+            return [{
+              ...moved,
+              isLanding: true,
+              landingProgress: 0,
+              path: [],
+              heading: runway.heading,
+              landingEntry: { x: moved.x, y: moved.y },
+              landingEntrySpeed: moved.speed,
+            }];
           }
           return [moved];
         });
