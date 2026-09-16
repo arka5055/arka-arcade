@@ -9,3 +9,7 @@ The [June 2026 anniversary release](https://www.gamespress.com/Planes-Control-Ce
 ## Core parity implemented in Skyline Signal
 
 Skyline Signal preserves player-drawn routes without synthetic points, maps each aircraft to one strict color-matched destination, offers collision avoidance, progressive traffic pressure, and stage-specific environments. The new helicopter type is violet, can only land on the dedicated violet H1 helipad, and may approach that pad from any direction.
+
+## Mixed-fleet calibration
+
+Rarepixels’ official App Store description confirms that the original roster includes **airliners, WWII fighters, jet planes, tilt rotors, and helicopters**, while the publisher does not expose internal numerical speed or model-scale values. Skyline Signal therefore uses a touch-safe, original-inspired relative hierarchy: compact helicopter, small commuter propeller aircraft, mid-size utility seaplane, large airliner, and the largest/fastest supersonic aircraft. The gameplay system applies these differences to both movement and the physical separation needed for collision warnings.

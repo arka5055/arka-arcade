@@ -17,6 +17,7 @@ import {
 } from '../lib/stage-environments';
 import { createCrashEffect, getCrashProgress } from '../lib/crash-effects';
 import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
+import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering } from '../lib/aircraft-performance';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -64,6 +65,23 @@ describe('Aircraft Definitions', () => {
     expect(AIRCRAFT_DEFS.jet.length).toBeLessThan(AIRCRAFT_DEFS.supersonic.length);
     expect(AIRCRAFT_DEFS.seaplane.wingspan).toBeGreaterThan(AIRCRAFT_DEFS.propeller.wingspan);
     expect(AIRCRAFT_DEFS.helicopter.wingspan).toBeLessThan(AIRCRAFT_DEFS.seaplane.wingspan);
+  });
+
+  it('keeps original-inspired mixed-fleet performance classes strictly ordered', () => {
+    const ordering = getPerformanceOrdering();
+    expect(ordering).toEqual(['helicopter', 'propeller', 'seaplane', 'jet', 'supersonic']);
+    for (let index = 1; index < ordering.length; index += 1) {
+      const slower = AIRCRAFT_PERFORMANCE[ordering[index - 1]];
+      const faster = AIRCRAFT_PERFORMANCE[ordering[index]];
+      expect(slower.normalizedSpeed).toBeLessThan(faster.normalizedSpeed);
+      expect(slower.normalizedFootprint).toBeLessThan(faster.normalizedFootprint);
+    }
+  });
+
+  it('scales collision space with the aircraft footprint', () => {
+    expect(getAircraftSafetyRadius('helicopter')).toBeLessThan(getAircraftSafetyRadius('propeller'));
+    expect(getAircraftSafetyRadius('propeller')).toBeLessThan(getAircraftSafetyRadius('jet'));
+    expect(getAircraftSafetyRadius('jet')).toBeLessThan(getAircraftSafetyRadius('supersonic'));
   });
 
   it('allows a flight to use exactly its assigned runway and rejects every other runway', () => {

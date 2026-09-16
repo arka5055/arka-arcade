@@ -26,6 +26,7 @@ import {
 } from '@/lib/stage-environments';
 import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/crash-effects';
 import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
+import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -251,9 +252,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const projectedDy = (p1.y + Math.sin(p1.heading) * p1.speed * lookAheadSeconds)
           - (p2.y + Math.sin(p2.heading) * p2.speed * lookAheadSeconds);
         const projectedDistance = Math.sqrt(projectedDx * projectedDx + projectedDy * projectedDy);
+        const combinedSafetyRadius = getAircraftSafetyRadius(p1.type) + getAircraftSafetyRadius(p2.type);
 
-        // Crash collision radius (~24px)
-        if (dist < 26) {
+        // Contact space reflects each vehicle's physical footprint: a compact
+        // helicopter can pass closer than a wide airliner, as in the original's mixed fleet.
+        if (dist < combinedSafetyRadius) {
           if (!crashEffectRef.current) {
             crashEffectRef.current = createCrashEffect((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
             isGameOverRef.current = true;
@@ -266,11 +269,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
 
         // Immediate danger uses red; predicted convergence uses amber well in advance.
-        if (dist < 65) {
+        if (dist < combinedSafetyRadius + 38) {
           p1.warningLevel = 'critical';
           p2.warningLevel = 'critical';
           hasCritical = true;
-        } else if ((dist < 115 || projectedDistance < 78)
+        } else if ((dist < combinedSafetyRadius + 88 || projectedDistance < combinedSafetyRadius + 52)
           && p1.warningLevel !== 'critical' && p2.warningLevel !== 'critical') {
           p1.warningLevel = 'caution';
           p2.warningLevel = 'caution';
@@ -910,39 +913,63 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.lineWidth = 1.8;
 
       if (p.type === 'helicopter') {
-        // Rescue helicopter: compact body, tail boom, skids, tail rotor, and main rotor.
+        // Compact rescue helicopter: animated spinning rotor disc, tail rotor, boom and skids.
+        // The translucent disc keeps the rotor readable during high RPM without looking like static lines.
+        const time = Date.now() * 0.001;
+        const rotorRadius = def.wingspan * 0.62;
+        const rotorPulse = 0.96 + Math.sin(time * 10 + p.createdAt) * 0.035;
+        ctx.save();
+        ctx.translate(-1, 0);
+        ctx.scale(rotorPulse, rotorPulse);
+        const rotorDisc = ctx.createRadialGradient(0, 0, rotorRadius * 0.12, 0, 0, rotorRadius);
+        rotorDisc.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
+        rotorDisc.addColorStop(0.52, 'rgba(222, 202, 255, 0.19)');
+        rotorDisc.addColorStop(1, 'rgba(200, 107, 255, 0)');
+        ctx.fillStyle = rotorDisc;
         ctx.beginPath();
-        ctx.ellipse(-2, 0, 10, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, rotorRadius, rotorRadius * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(248, 242, 255, 0.28)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rotorRadius, rotorRadius * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.beginPath();
+        ctx.ellipse(0, 0, def.length * 0.42, def.length * 0.27, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = def.color;
-        ctx.fillRect(-def.length * 0.55, -2.3, def.length * 0.43, 4.6);
+        ctx.fillRect(-def.length * 0.72, -2.1, def.length * 0.52, 4.2);
         ctx.strokeStyle = '#f2eaff';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.moveTo(-def.length * 0.55, -7);
-        ctx.lineTo(-def.length * 0.55, 7);
-        ctx.moveTo(-def.length * 0.62, 0);
-        ctx.lineTo(-def.length * 0.48, 0);
+        ctx.moveTo(-def.length * 0.72, -5.5);
+        ctx.lineTo(-def.length * 0.72, 5.5);
+        ctx.moveTo(-def.length * 0.79, 0);
+        ctx.lineTo(-def.length * 0.65, 0);
         ctx.stroke();
         ctx.strokeStyle = '#1a2632';
-        ctx.lineWidth = 2;
-        [-4, 5].forEach((skidX) => {
+        ctx.lineWidth = 1.65;
+        [-def.length * 0.18, def.length * 0.24].forEach((skidX) => {
           ctx.beginPath();
-          ctx.moveTo(skidX, 4);
-          ctx.lineTo(skidX - 2, 10);
-          ctx.lineTo(skidX + 5, 10);
+          ctx.moveTo(skidX, 3.5);
+          ctx.lineTo(skidX - 1.6, 7.5);
+          ctx.lineTo(skidX + 4.5, 7.5);
           ctx.stroke();
         });
         ctx.save();
-        ctx.rotate(Date.now() * 0.045 + p.createdAt);
-        ctx.strokeStyle = 'rgba(248, 242, 255, 0.88)';
-        ctx.lineWidth = 1.6;
+        ctx.rotate(time * 17 + p.createdAt);
+        ctx.strokeStyle = 'rgba(248, 242, 255, 0.72)';
+        ctx.lineWidth = 1.15;
         ctx.beginPath();
-        ctx.moveTo(-2, -def.wingspan * 0.58);
-        ctx.lineTo(-2, def.wingspan * 0.58);
-        ctx.moveTo(-def.wingspan * 0.58 - 2, 0);
-        ctx.lineTo(def.wingspan * 0.58 - 2, 0);
+        ctx.moveTo(0, -rotorRadius);
+        ctx.lineTo(0, rotorRadius);
+        ctx.moveTo(-rotorRadius, 0);
+        ctx.lineTo(rotorRadius, 0);
+        ctx.moveTo(-rotorRadius * 0.7, -rotorRadius * 0.7);
+        ctx.lineTo(rotorRadius * 0.7, rotorRadius * 0.7);
         ctx.stroke();
         ctx.restore();
       } else if (p.type === 'supersonic') {
@@ -1018,9 +1045,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       // Distinct propulsion signatures improve aircraft recognition while in motion.
       if (p.type === 'helicopter') {
-        ctx.fillStyle = 'rgba(200, 107, 255, 0.24)';
+        const hoverPulse = 0.14 + Math.sin(Date.now() * 0.018 + p.createdAt) * 0.04;
+        ctx.fillStyle = `rgba(200, 107, 255, ${hoverPulse})`;
         ctx.beginPath();
-        ctx.ellipse(-def.length * 0.52, 0, 8, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(-def.length * 0.48, 0, 7, 4.2, 0, 0, Math.PI * 2);
         ctx.fill();
       } else if (p.type === 'supersonic') {
         const flameLength = 12 + Math.sin(Date.now() * 0.035 + p.createdAt) * 3;

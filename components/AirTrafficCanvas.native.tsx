@@ -27,6 +27,7 @@ import {
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
 import { getAssignedRunway } from '@/lib/runway-assignment';
+import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -192,7 +193,8 @@ export function AirTrafficCanvas({
 
         for (let i = 0; i < next.length; i += 1) {
           for (let j = i + 1; j < next.length; j += 1) {
-            if (Math.hypot(next[i].x - next[j].x, next[i].y - next[j].y) < 22) {
+            if (Math.hypot(next[i].x - next[j].x, next[i].y - next[j].y)
+              < getAircraftSafetyRadius(next[i].type) + getAircraftSafetyRadius(next[j].type)) {
               gameOverRef.current = true;
               setTimeout(() => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -347,9 +349,11 @@ export function AirTrafficCanvas({
                 <Circle cx={-3} cy={-12} r={2} fill="#ff3d71" />
                 <Circle cx={-3} cy={12} r={2} fill="#00e676" />
                 {plane.type === 'helicopter' && <G>
-                  <Line x1={-2} y1={-20} x2={-2} y2={20} stroke="#f8f2ff" strokeWidth={1.8} />
-                  <Line x1={-20} y1={0} x2={16} y2={0} stroke="#f8f2ff" strokeWidth={1.8} />
-                  <Line x1={-14} y1={0} x2={-28} y2={0} stroke={def.color} strokeWidth={4} />
+                  <Circle cx={0} cy={0} r={def.wingspan * 0.5} fill="#c86bff" fillOpacity={0.10} />
+                  <Circle cx={0} cy={0} r={def.wingspan * 0.5} fill="none" stroke="#f8f2ff" strokeOpacity={0.30} strokeWidth={0.8} />
+                  <Line x1={0} y1={-def.wingspan * 0.5} x2={0} y2={def.wingspan * 0.5} stroke="#f8f2ff" strokeOpacity={0.7} strokeWidth={1.1} />
+                  <Line x1={-def.wingspan * 0.5} y1={0} x2={def.wingspan * 0.5} y2={0} stroke="#f8f2ff" strokeOpacity={0.7} strokeWidth={1.1} />
+                  <Line x1={-def.length * 0.55} y1={0} x2={-def.length * 0.95} y2={0} stroke={def.color} strokeWidth={3.2} />
                 </G>}
                 {plane.isLanding && <G>
                   <Line x1={-6} y1={-2} x2={-8} y2={8} stroke="#1d2830" strokeWidth={2} />
