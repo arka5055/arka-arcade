@@ -104,17 +104,24 @@ class SoundController {
     if (!this.ctx) return;
     try {
       if (this.ctx.state === 'suspended') this.ctx.resume();
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(140, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.6);
-      gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.7);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.7);
+      const now = this.ctx.currentTime;
+      [
+        { type: 'sawtooth' as OscillatorType, start: 118, end: 28, gain: 0.19, duration: 0.78 },
+        { type: 'square' as OscillatorType, start: 62, end: 24, gain: 0.12, duration: 0.64 },
+        { type: 'triangle' as OscillatorType, start: 680, end: 90, gain: 0.08, duration: 0.30 },
+      ].forEach((layer) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.type = layer.type;
+        osc.frequency.setValueAtTime(layer.start, now);
+        osc.frequency.exponentialRampToValueAtTime(layer.end, now + layer.duration);
+        gain.gain.setValueAtTime(layer.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + layer.duration);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        osc.start(now);
+        osc.stop(now + layer.duration);
+      });
     } catch {}
   }
 }

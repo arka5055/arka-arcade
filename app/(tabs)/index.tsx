@@ -378,6 +378,9 @@ export default function GameScreen() {
                 ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.
               </Text>
               <Text style={styles.infoParagraph}>
+                🌍 <Text style={styles.bold}>Changing Sectors:</Text> Every completed sector moves to a new environment—coastal crosswind, alpine peak, then night superstorm. Traffic becomes denser within a sector and increases again at every new stage.
+              </Text>
+              <Text style={styles.infoParagraph}>
                 ⚠️ <Text style={styles.bold}>Proximity Alarms:</Text> Keep aircraft separated! Yellow halos mean caution; flashing red halos signal imminent mid-air collision.
               </Text>
             </ScrollView>

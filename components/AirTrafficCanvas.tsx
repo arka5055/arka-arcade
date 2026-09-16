@@ -19,6 +19,12 @@ import {
 import { preservePlayerDrawnRoute } from '@/lib/player-routing';
 import { validateLandingRoute } from '@/lib/landing-route-validation';
 import { getDriftingCloudShadows } from '@/lib/scenery-effects';
+import {
+  getDynamicSpawnInterval,
+  getStageEnvironment,
+  getTrafficPressure,
+} from '@/lib/stage-environments';
+import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/crash-effects';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -67,17 +73,21 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const runwaysRef = useRef<RunwayZone[]>([]);
   const warningBeepCooldownRef = useRef<number>(0);
   const sceneryImageRef = useRef<HTMLImageElement | null>(null);
+  const crashEffectRef = useRef<CrashEffect | null>(null);
+  const crashReportedRef = useRef(false);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
+  const stageEnvironment = getStageEnvironment(levelIndex);
 
   useEffect(() => {
+    sceneryImageRef.current = null;
     const image = new Image();
-    image.src = coastalAirportScene;
+    image.src = stageEnvironment.sceneUrl || coastalAirportScene;
     image.onload = () => {
       sceneryImageRef.current = image;
     };
-  }, []);
+  }, [stageEnvironment.sceneUrl]);
 
   // Initialize Runways based on dimensions
   const updateRunwayCoordinates = useCallback((w: number, h: number) => {
@@ -180,7 +190,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       y,
       heading,
       targetHeading: heading,
-      speed: def.speed * currentLevel.speedMultiplier,
+      speed: def.speed * currentLevel.speedMultiplier
+        * getTrafficPressure(landingsCountRef.current, currentLevel.targetLandings),
       path: [],
       landingCleared: false,
       isLanding: false,
@@ -226,12 +237,14 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
         // Crash collision radius (~24px)
         if (dist < 26) {
-          isGameOverRef.current = true;
-          sounds.playCrash();
-          if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          if (!crashEffectRef.current) {
+            crashEffectRef.current = createCrashEffect((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+            isGameOverRef.current = true;
+            sounds.playCrash();
+            if (Platform.OS !== 'web') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
           }
-          onGameOver('Mid-air Collision!', scoreRef.current, landingsCountRef.current);
           return;
         }
 
@@ -407,7 +420,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.save();
       ctx.globalAlpha = 0.42;
       ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-      ctx.fillStyle = 'rgba(3, 15, 24, 0.38)';
+      ctx.fillStyle = stageEnvironment.tint;
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
     }
@@ -427,7 +440,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // Island landmass polygon
     const islandGrad = ctx.createLinearGradient(w * 0.1, h * 0.1, w * 0.9, h * 0.9);
     islandGrad.addColorStop(0, '#244e3f');
-    islandGrad.addColorStop(1, '#102d28');
+    islandGrad.addColorStop(1, stageEnvironment.terrainTint);
     ctx.fillStyle = islandGrad;
     ctx.beginPath();
     ctx.moveTo(w * 0.10, h * 0.08);
@@ -614,7 +627,46 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.restore();
     });
 
-    // 4. Draw Flight Paths
+    // 4. Draw a subtle permanent destination beam for every aircraft. This creates an
+    // immediate one-to-one association from the aircraft to its exact landing course.
+    planesRef.current.forEach((plane) => {
+      if (plane.isLanding) return;
+      const destination = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+      if (!destination) return;
+      const approach = getApproachEntry(destination, 86);
+      const isSelected = selectedPlaneIdRef.current === plane.id;
+      const color = AIRCRAFT_DEFS[plane.type].color;
+      const guideAlpha = isSelected ? 'B8' : '4A';
+      ctx.save();
+      ctx.strokeStyle = `${color}${guideAlpha}`;
+      ctx.lineWidth = isSelected ? 3 : 1.5;
+      ctx.setLineDash(isSelected ? [7, 5] : [3, 10]);
+      ctx.beginPath();
+      ctx.moveTo(plane.x, plane.y);
+      ctx.lineTo(approach.x, approach.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // A glowing course beacon makes the destination recognisable before the player touches a plane.
+      const pulse = isSelected ? 1 + Math.sin(Date.now() * 0.012) * 0.14 : 1;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isSelected ? 12 : 4;
+      ctx.fillStyle = `${color}${isSelected ? 'E8' : '8A'}`;
+      ctx.beginPath();
+      ctx.arc(approach.x, approach.y, (isSelected ? 7 : 4) * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      if (isSelected) {
+        const courseName = destination.id === 'runway-main' ? 'R34' : destination.id === 'runway-diagonal' ? 'R28' : 'BAY';
+        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(`LAND ${courseName}`, approach.x, approach.y - 12);
+      }
+      ctx.restore();
+    });
+
+    // 5. Draw Flight Paths
     planesRef.current.forEach(p => {
       if (p.path.length > 0) {
         ctx.save();
@@ -864,6 +916,41 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         });
       }
 
+      // Distinct propulsion signatures improve aircraft recognition while in motion.
+      if (p.type === 'supersonic') {
+        const flameLength = 12 + Math.sin(Date.now() * 0.035 + p.createdAt) * 3;
+        const flame = ctx.createLinearGradient(-def.length * 0.38, 0, -def.length * 0.38 - flameLength, 0);
+        flame.addColorStop(0, 'rgba(248, 252, 255, 0.95)');
+        flame.addColorStop(0.38, 'rgba(0, 229, 255, 0.78)');
+        flame.addColorStop(1, 'rgba(255, 61, 113, 0)');
+        ctx.fillStyle = flame;
+        ctx.beginPath();
+        ctx.moveTo(-def.length * 0.36, -4);
+        ctx.lineTo(-def.length * 0.36 - flameLength, 0);
+        ctx.lineTo(-def.length * 0.36, 4);
+        ctx.closePath();
+        ctx.fill();
+      } else if (p.type === 'propeller') {
+        const propSpin = Date.now() * 0.028;
+        ctx.save();
+        ctx.translate(def.length * 0.49, 0);
+        ctx.rotate(propSpin);
+        ctx.strokeStyle = 'rgba(236, 251, 255, 0.76)';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(-1, -10);
+        ctx.lineTo(1, 10);
+        ctx.moveTo(-10, -1);
+        ctx.lineTo(10, 1);
+        ctx.stroke();
+        ctx.restore();
+      } else if (p.type === 'jet') {
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.52)';
+        ctx.beginPath();
+        ctx.ellipse(-def.length * 0.5, 0, 5, 2.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // Cockpit glass plus windows.
       ctx.fillStyle = '#142d48';
       ctx.beginPath();
@@ -942,7 +1029,68 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fillText(routeLabel, p.x, tagY + 11.5);
       ctx.restore();
     });
-  }, [dimensions]);
+
+    // Collision sequence: a bright flash, expanding shockwave, physical debris, then smoke.
+    // It runs entirely inside the canvas loop so the game freezes but the consequence is visible.
+    const crash = crashEffectRef.current;
+    if (crash) {
+      const progress = getCrashProgress(crash);
+      const flash = Math.max(0, 1 - progress * 6);
+      const shockwaveRadius = 18 + progress * 145;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      const fireball = ctx.createRadialGradient(crash.x, crash.y, 2, crash.x, crash.y, 74 * (0.55 + progress));
+      fireball.addColorStop(0, `rgba(255, 255, 255, ${0.98 - progress * 0.55})`);
+      fireball.addColorStop(0.14, `rgba(255, 238, 126, ${0.92 - progress * 0.42})`);
+      fireball.addColorStop(0.43, `rgba(255, 110, 35, ${0.78 - progress * 0.52})`);
+      fireball.addColorStop(1, 'rgba(255, 45, 45, 0)');
+      ctx.fillStyle = fireball;
+      ctx.beginPath();
+      ctx.arc(crash.x, crash.y, 76 * (0.55 + progress), 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = `rgba(255, 220, 120, ${Math.max(0, 0.92 - progress)})`;
+      ctx.lineWidth = 4 - progress * 2;
+      ctx.beginPath();
+      ctx.arc(crash.x, crash.y, shockwaveRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      crash.fragments.forEach((fragment) => {
+        const distance = fragment.speed * (0.25 + progress * 0.95);
+        const x = crash.x + Math.cos(fragment.angle) * distance;
+        const y = crash.y + Math.sin(fragment.angle) * distance + progress * progress * 42;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(fragment.spin * progress * 2.8);
+        ctx.fillStyle = fragment.color;
+        ctx.shadowColor = '#ff8b28';
+        ctx.shadowBlur = 9 * (1 - progress);
+        ctx.fillRect(-fragment.size, -fragment.size * 0.45, fragment.size * 2.3, fragment.size * 0.9);
+        ctx.restore();
+      });
+
+      if (progress > 0.18) {
+        const smokeOpacity = Math.min(0.62, (progress - 0.18) * 0.85);
+        for (let cloud = 0; cloud < 6; cloud += 1) {
+          const offsetX = Math.sin(cloud * 2.1) * (16 + cloud * 8);
+          const offsetY = -progress * (50 + cloud * 8) + Math.cos(cloud * 1.7) * 9;
+          ctx.fillStyle = `rgba(22, 28, 36, ${smokeOpacity * (1 - cloud * 0.08)})`;
+          ctx.beginPath();
+          ctx.arc(crash.x + offsetX, crash.y + offsetY, 12 + cloud * 4 + progress * 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      if (flash > 0) {
+        ctx.fillStyle = `rgba(255, 244, 214, ${flash * 0.26})`;
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.fillStyle = `rgba(255, 61, 71, ${Math.max(0, 0.28 - progress * 0.24)})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+  }, [dimensions, stageEnvironment]);
 
   // Main Animation Tick
   useEffect(() => {
@@ -953,10 +1101,19 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1);
       lastFrameTimeRef.current = now;
 
-      if (!isPaused && !isGameOverRef.current) {
+      const crashEffect = crashEffectRef.current;
+      if (crashEffect) {
+        crashEffect.elapsed += dt;
+        if (crashEffect.elapsed >= crashEffect.duration && !crashReportedRef.current) {
+          crashReportedRef.current = true;
+          onGameOver('Mid-air Collision!', scoreRef.current, landingsCountRef.current);
+        }
+      } else if (!isPaused && !isGameOverRef.current) {
         cloudDriftRef.current = (cloudDriftRef.current + dt * 0.035) % 1.35;
         // Spawn schedule
-        if (shouldSpawnAircraft(now, lastSpawnTimeRef.current, currentLevel.spawnIntervalMs)) {
+        const pressure = getTrafficPressure(landingsCountRef.current, currentLevel.targetLandings);
+        const spawnInterval = getDynamicSpawnInterval(currentLevel.spawnIntervalMs, pressure);
+        if (shouldSpawnAircraft(now, lastSpawnTimeRef.current, spawnInterval)) {
           spawnAircraft();
           lastSpawnTimeRef.current = now;
         }
@@ -1111,6 +1268,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     isGameOverRef.current = false;
     landingsCountRef.current = 0;
     scoreRef.current = 0;
+    crashEffectRef.current = null;
+    crashReportedRef.current = false;
     lastSpawnTimeRef.current = performance.now();
     const firstFlight = setTimeout(() => {
       spawnAircraft();

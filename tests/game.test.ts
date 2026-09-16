@@ -9,6 +9,13 @@ import {
 import { preservePlayerDrawnRoute } from '../lib/player-routing';
 import { getDriftingCloudShadows } from '../lib/scenery-effects';
 import { validateLandingRoute } from '../lib/landing-route-validation';
+import {
+  getDynamicSpawnInterval,
+  getStageEnvironment,
+  getTrafficPressure,
+  STAGE_ENVIRONMENTS,
+} from '../lib/stage-environments';
+import { createCrashEffect, getCrashProgress } from '../lib/crash-effects';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -62,6 +69,33 @@ describe('Spawn scheduler', () => {
 
   it('works with animation-clock values rather than wall-clock epoch values', () => {
     expect(shouldSpawnAircraft(18_100, 9_000, 9_000)).toBe(true);
+  });
+});
+
+describe('Stage environments and progressive pressure', () => {
+  it('assigns a different cached landscape to every gameplay stage', () => {
+    expect(STAGE_ENVIRONMENTS).toHaveLength(4);
+    expect(new Set(STAGE_ENVIRONMENTS.map((environment) => environment.sceneUrl)).size).toBe(4);
+    expect(getStageEnvironment(3).label).toContain('SUPERSTORM');
+  });
+
+  it('gently increases traffic pressure and reduces the spawn interval as a sector progresses', () => {
+    const initial = getTrafficPressure(0, 12);
+    const lateSector = getTrafficPressure(12, 12);
+    expect(initial).toBe(1);
+    expect(lateSector).toBeGreaterThan(initial);
+    expect(getDynamicSpawnInterval(7600, lateSector)).toBeLessThan(7600);
+  });
+});
+
+describe('Collision feedback', () => {
+  it('creates a cinematic but bounded visual collision sequence', () => {
+    const crash = createCrashEffect(150, 220);
+    expect(crash.fragments).toHaveLength(18);
+    expect(crash.duration).toBeGreaterThan(1);
+    expect(getCrashProgress(crash)).toBe(0);
+    crash.elapsed = crash.duration * 2;
+    expect(getCrashProgress(crash)).toBe(1);
   });
 });
 

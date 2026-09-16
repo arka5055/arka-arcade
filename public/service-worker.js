@@ -1,5 +1,9 @@
-const CACHE = 'skyline-signal-v4';
-const APP_SHELL = ['/', '/manifest.json', '/scenery/airport.jpg', '/icons/skyline-180.png', '/icons/skyline-192.png', '/icons/skyline-512.png'];
+const CACHE = 'skyline-signal-v5';
+const APP_SHELL = [
+  '/', '/manifest.json',
+  '/scenery/airport.jpg', '/scenery/crosswind-coast.jpg', '/scenery/peak-rush-hour.jpg', '/scenery/superstorm-radar.jpg',
+  '/icons/skyline-180.png', '/icons/skyline-192.png', '/icons/skyline-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
