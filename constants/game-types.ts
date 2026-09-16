@@ -17,56 +17,56 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
   jet: {
     type: 'jet',
     name: 'Commercial Jet',
-    speed: 34,
+    speed: 38,
     turnSpeed: 2.25,
     scoreValue: 100,
     color: '#00E5FF', // Cyan / Light Blue
-    wingspan: 34,
-    length: 38,
+    wingspan: 40,
+    length: 44,
     landingZoneId: 'runway-main',
   },
   propeller: {
     type: 'propeller',
     name: 'Cessna Commuter',
-    speed: 24,
+    speed: 23,
     turnSpeed: 3.0,
     scoreValue: 150,
     color: '#FFB300', // Amber
-    wingspan: 22,
-    length: 20,
+    wingspan: 20,
+    length: 17,
     landingZoneId: 'runway-diagonal',
   },
   supersonic: {
     type: 'supersonic',
     name: 'Concorde Express',
-    speed: 49,
+    speed: 48,
     turnSpeed: 1.75,
     scoreValue: 250,
     color: '#00E5FF', // Same cyan as Runway 34
-    wingspan: 30,
-    length: 46,
+    wingspan: 36,
+    length: 52,
     landingZoneId: 'runway-main',
   },
   seaplane: {
     type: 'seaplane',
     name: 'Lagoon Seaplane',
-    speed: 30,
+    speed: 28,
     turnSpeed: 2.65,
     scoreValue: 180,
     color: '#00E676', // Emerald Green
-    wingspan: 32,
-    length: 29,
+    wingspan: 30,
+    length: 28,
     landingZoneId: 'water-bay',
   },
   helicopter: {
     type: 'helicopter',
     name: 'Rescue Helicopter',
-    speed: 22,
-    turnSpeed: 3.6,
+    speed: 15,
+    turnSpeed: 3.8,
     scoreValue: 200,
     color: '#C86BFF', // Violet, matches Helipad H1
-    wingspan: 34, // Rotor diameter
-    length: 23,
+    wingspan: 22, // Rotor diameter
+    length: 14,
     landingZoneId: 'helipad-h1',
   },
 };

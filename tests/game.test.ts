@@ -24,7 +24,7 @@ describe('Aircraft Definitions', () => {
     types.forEach((t) => {
       const def = AIRCRAFT_DEFS[t];
       expect(def).toBeDefined();
-      expect(def.speed).toBeGreaterThan(20);
+      expect(def.speed).toBeGreaterThan(12);
       expect(def.turnSpeed).toBeGreaterThan(1);
       expect(def.scoreValue).toBeGreaterThan(50);
       expect(def.color).toMatch(/^#/);
@@ -54,9 +54,16 @@ describe('Aircraft Definitions', () => {
   });
 
   it('keeps the aircraft classes visibly distinct in size and speed', () => {
-    expect(AIRCRAFT_DEFS.supersonic.speed).toBeGreaterThan(AIRCRAFT_DEFS.jet.speed);
-    expect(AIRCRAFT_DEFS.jet.length).toBeGreaterThan(AIRCRAFT_DEFS.propeller.length);
+    expect(AIRCRAFT_DEFS.helicopter.speed).toBeLessThan(AIRCRAFT_DEFS.propeller.speed);
+    expect(AIRCRAFT_DEFS.propeller.speed).toBeLessThan(AIRCRAFT_DEFS.seaplane.speed);
+    expect(AIRCRAFT_DEFS.seaplane.speed).toBeLessThan(AIRCRAFT_DEFS.jet.speed);
+    expect(AIRCRAFT_DEFS.jet.speed).toBeLessThan(AIRCRAFT_DEFS.supersonic.speed);
+    expect(AIRCRAFT_DEFS.helicopter.length).toBeLessThan(AIRCRAFT_DEFS.propeller.length);
+    expect(AIRCRAFT_DEFS.propeller.length).toBeLessThan(AIRCRAFT_DEFS.seaplane.length);
+    expect(AIRCRAFT_DEFS.seaplane.length).toBeLessThan(AIRCRAFT_DEFS.jet.length);
+    expect(AIRCRAFT_DEFS.jet.length).toBeLessThan(AIRCRAFT_DEFS.supersonic.length);
     expect(AIRCRAFT_DEFS.seaplane.wingspan).toBeGreaterThan(AIRCRAFT_DEFS.propeller.wingspan);
+    expect(AIRCRAFT_DEFS.helicopter.wingspan).toBeLessThan(AIRCRAFT_DEFS.seaplane.wingspan);
   });
 
   it('allows a flight to use exactly its assigned runway and rejects every other runway', () => {

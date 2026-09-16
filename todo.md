@@ -12,3 +12,9 @@
 - [x] Upgrade aircraft visual signatures: jet exhaust, supersonic afterburners, and propeller animation.
 - [x] Add staged collision feedback: flash, fireball, shockwave, debris, smoke, and layered impact audio.
 - [ ] Verify stage transitions, collision playback, and iPhone viewport presentation after the integrated build.
+
+## Aircraft hierarchy refinement
+
+- [x] Make the helicopter the smallest and slowest active aircraft.
+- [x] Reinforce original-style visual and speed hierarchy: helicopter → propeller → seaplane → commercial jet → supersonic.
+- [ ] Validate the revised flight profile in the browser build.
