@@ -1,4 +1,4 @@
-export type AircraftType = 'jet' | 'propeller' | 'supersonic' | 'seaplane';
+export type AircraftType = 'jet' | 'propeller' | 'supersonic' | 'seaplane' | 'helicopter';
 
 export interface AircraftConfig {
   type: AircraftType;
@@ -58,6 +58,17 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
     length: 29,
     landingZoneId: 'water-bay',
   },
+  helicopter: {
+    type: 'helicopter',
+    name: 'Rescue Helicopter',
+    speed: 22,
+    turnSpeed: 3.6,
+    scoreValue: 200,
+    color: '#C86BFF', // Violet, matches Helipad H1
+    wingspan: 34, // Rotor diameter
+    length: 23,
+    landingZoneId: 'helipad-h1',
+  },
 };
 
 export interface Point {
@@ -94,7 +105,7 @@ export interface RunwayZone {
   headingTolerance: number; // e.g. 0.7 rad (~40 deg)
   touchdownRadius: number; // entry gate radius
   color: string;
-  type: 'runway' | 'water';
+  type: 'runway' | 'water' | 'helipad';
 }
 
 export interface GameLevel {
@@ -115,7 +126,7 @@ export const LEVELS: GameLevel[] = [
     targetLandings: 6,
     spawnIntervalMs: 9000,
     speedMultiplier: 0.85,
-    allowedTypes: ['jet', 'propeller'],
+    allowedTypes: ['jet', 'propeller', 'helicopter'],
     windDirection: 0,
     windSpeed: 0,
   },
@@ -125,7 +136,7 @@ export const LEVELS: GameLevel[] = [
     targetLandings: 12,
     spawnIntervalMs: 7600,
     speedMultiplier: 1.0,
-    allowedTypes: ['jet', 'propeller', 'seaplane'],
+    allowedTypes: ['jet', 'propeller', 'seaplane', 'helicopter'],
     windDirection: Math.PI / 4,
     windSpeed: 2,
   },
@@ -135,7 +146,7 @@ export const LEVELS: GameLevel[] = [
     targetLandings: 20,
     spawnIntervalMs: 6200,
     speedMultiplier: 1.15,
-    allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
+    allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter'],
     windDirection: Math.PI / 2,
     windSpeed: 4,
   },
@@ -145,7 +156,7 @@ export const LEVELS: GameLevel[] = [
     targetLandings: 30,
     spawnIntervalMs: 5000,
     speedMultiplier: 1.3,
-    allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
+    allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter'],
     windDirection: -Math.PI / 3,
     windSpeed: 6,
   },

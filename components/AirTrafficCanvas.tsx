@@ -140,7 +140,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       type: 'water',
     };
 
-    runwaysRef.current = [mainRunway, diagRunway, waterZone];
+    // 4. Dedicated rooftop helipad. Helicopters lock here from any approach direction.
+    const helipad: RunwayZone = {
+      id: 'helipad-h1',
+      name: 'Helipad H1',
+      startX: w * 0.25,
+      startY: h * 0.53,
+      endX: w * 0.25,
+      endY: h * 0.53,
+      allowedTypes: ['helicopter'],
+      heading: 0,
+      headingTolerance: Math.PI,
+      touchdownRadius: 34,
+      color: '#C86BFF',
+      type: 'helipad',
+    };
+
+    runwaysRef.current = [mainRunway, diagRunway, waterZone, helipad];
   }, []);
 
   // Spawn aircraft from perimeter
@@ -521,6 +537,50 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
       const isSuggestedRunway = Boolean(selectedPlane && isAssignedRunway(selectedPlane.type, runway));
       const approachEntry = getApproachEntry(runway);
+      if (runway.type === 'helipad') {
+        const padSize = 58;
+        const pulse = isSuggestedRunway ? 1 + Math.sin(Date.now() * 0.012) * 0.08 : 1;
+        ctx.save();
+        ctx.translate(runway.startX, runway.startY);
+        ctx.scale(pulse, pulse);
+        ctx.shadowColor = runway.color;
+        ctx.shadowBlur = isSuggestedRunway ? 20 : 10;
+        ctx.fillStyle = '#16152a';
+        ctx.fillRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        ctx.strokeStyle = runway.color;
+        ctx.lineWidth = isSuggestedRunway ? 4 : 3;
+        ctx.strokeRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 27px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('H', 0, 1);
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+        const label = 'HELI · H1';
+        const labelWidth = ctx.measureText(label).width + 14;
+        ctx.fillStyle = 'rgba(18, 12, 34, 0.94)';
+        ctx.fillRect(-labelWidth / 2, -46, labelWidth, 17);
+        ctx.strokeStyle = runway.color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-labelWidth / 2, -46, labelWidth, 17);
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(label, 0, -34);
+        if (isSuggestedRunway) {
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+          ctx.fillText('TOUCH DOWN', 0, 47);
+        }
+        ctx.restore();
+        return;
+      }
       // Runway asphalt strip
       ctx.save();
       ctx.shadowColor = runway.color;
@@ -653,7 +713,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fill();
       ctx.shadowBlur = 0;
       if (isSelected) {
-        const courseName = destination.id === 'runway-main' ? 'R34' : destination.id === 'runway-diagonal' ? 'R28' : 'BAY';
+        const courseName = destination.id === 'runway-main'
+          ? 'R34'
+          : destination.id === 'runway-diagonal'
+            ? 'R28'
+            : destination.id === 'helipad-h1'
+              ? 'H1'
+              : 'BAY';
         ctx.font = '800 10px -apple-system, system-ui, sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
@@ -772,7 +838,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const scale = p.isLanding ? Math.max(0.4, 1 - p.landingProgress * 0.5) : 1;
 
       // Fine vapour trail is visible only during flight; it disappears during runway rollout.
-      if (!p.isLanding) {
+      if (!p.isLanding && p.type !== 'helicopter') {
         const trailLength = p.type === 'supersonic' ? 34 : 22;
         ctx.save();
         ctx.lineCap = 'round';
@@ -843,7 +909,43 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.shadowBlur = 5;
       ctx.lineWidth = 1.8;
 
-      if (p.type === 'supersonic') {
+      if (p.type === 'helicopter') {
+        // Rescue helicopter: compact body, tail boom, skids, tail rotor, and main rotor.
+        ctx.beginPath();
+        ctx.ellipse(-2, 0, 10, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = def.color;
+        ctx.fillRect(-def.length * 0.55, -2.3, def.length * 0.43, 4.6);
+        ctx.strokeStyle = '#f2eaff';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-def.length * 0.55, -7);
+        ctx.lineTo(-def.length * 0.55, 7);
+        ctx.moveTo(-def.length * 0.62, 0);
+        ctx.lineTo(-def.length * 0.48, 0);
+        ctx.stroke();
+        ctx.strokeStyle = '#1a2632';
+        ctx.lineWidth = 2;
+        [-4, 5].forEach((skidX) => {
+          ctx.beginPath();
+          ctx.moveTo(skidX, 4);
+          ctx.lineTo(skidX - 2, 10);
+          ctx.lineTo(skidX + 5, 10);
+          ctx.stroke();
+        });
+        ctx.save();
+        ctx.rotate(Date.now() * 0.045 + p.createdAt);
+        ctx.strokeStyle = 'rgba(248, 242, 255, 0.88)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-2, -def.wingspan * 0.58);
+        ctx.lineTo(-2, def.wingspan * 0.58);
+        ctx.moveTo(-def.wingspan * 0.58 - 2, 0);
+        ctx.lineTo(def.wingspan * 0.58 - 2, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else if (p.type === 'supersonic') {
         // Delta wing supersonic jet
         ctx.beginPath();
         ctx.moveTo(def.length * 0.55, 0); // nose
@@ -915,7 +1017,12 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
 
       // Distinct propulsion signatures improve aircraft recognition while in motion.
-      if (p.type === 'supersonic') {
+      if (p.type === 'helicopter') {
+        ctx.fillStyle = 'rgba(200, 107, 255, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(-def.length * 0.52, 0, 8, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'supersonic') {
         const flameLength = 12 + Math.sin(Date.now() * 0.035 + p.createdAt) * 3;
         const flame = ctx.createLinearGradient(-def.length * 0.38, 0, -def.length * 0.38 - flameLength, 0);
         flame.addColorStop(0, 'rgba(248, 252, 255, 0.95)');
@@ -977,7 +1084,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.shadowBlur = 0;
 
       // Gear deploys for rollout and rolls along the centreline.
-      if (p.isLanding) {
+      if (p.isLanding && p.type !== 'helicopter') {
         ctx.strokeStyle = '#1d2830';
         ctx.lineWidth = 2;
         [-7, 5].forEach((wheelX) => {
@@ -1012,7 +1119,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           ? 'SST → R34'
           : p.type === 'propeller'
             ? 'PROP → R28'
-            : 'SEA → BAY';
+            : p.type === 'helicopter'
+              ? 'HELI → H1'
+              : 'SEA → BAY';
       ctx.save();
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const routeWidth = ctx.measureText(routeLabel).width + 12;

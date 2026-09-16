@@ -41,6 +41,7 @@ const routeName = (type: AircraftType) => {
   if (type === 'jet') return 'JET → R34';
   if (type === 'supersonic') return 'SST → R34';
   if (type === 'propeller') return 'PROP → R28';
+  if (type === 'helicopter') return 'HELI → H1';
   return 'SEA → BAY';
 };
 
@@ -80,6 +81,11 @@ export function AirTrafficCanvas({
         id: 'water-bay', name: 'SEAPLANE · BAY', startX: w * 0.20, startY: h * 0.72,
         endX: w * 0.43, endY: h * 0.88, allowedTypes: ['seaplane'],
         heading: Math.atan2(h * 0.16, w * 0.23), headingTolerance: 1.2, touchdownRadius: 38, color: '#00E676', type: 'water',
+      },
+      {
+        id: 'helipad-h1', name: 'HELI · H1', startX: w * 0.25, startY: h * 0.53,
+        endX: w * 0.25, endY: h * 0.53, allowedTypes: ['helicopter'],
+        heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad',
       },
     ];
   }, [bounds]);
@@ -301,6 +307,14 @@ export function AirTrafficCanvas({
             <SvgText x={runway.startX} y={runway.startY - 30} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{runway.name}</SvgText>
           </G>
         ))}
+        {(() => {
+          const helipad = runways.find((runway) => runway.type === 'helipad');
+          return helipad ? <G>
+            <Rect x={helipad.startX - 29} y={helipad.startY - 29} width={58} height={58} fill="#16152a" stroke="#C86BFF" strokeWidth={3} />
+            <Circle cx={helipad.startX} cy={helipad.startY} r={18} fill="none" stroke="#ffffff" strokeWidth={2} />
+            <SvgText x={helipad.startX} y={helipad.startY + 9} fill="#ffffff" fontSize={27} fontWeight="900" textAnchor="middle">H</SvgText>
+          </G> : null;
+        })()}
 
         {planes.map((plane) => {
           const def = AIRCRAFT_DEFS[plane.type];
@@ -332,6 +346,11 @@ export function AirTrafficCanvas({
                 <Circle cx={7} cy={0} r={3} fill="#17385a" />
                 <Circle cx={-3} cy={-12} r={2} fill="#ff3d71" />
                 <Circle cx={-3} cy={12} r={2} fill="#00e676" />
+                {plane.type === 'helicopter' && <G>
+                  <Line x1={-2} y1={-20} x2={-2} y2={20} stroke="#f8f2ff" strokeWidth={1.8} />
+                  <Line x1={-20} y1={0} x2={16} y2={0} stroke="#f8f2ff" strokeWidth={1.8} />
+                  <Line x1={-14} y1={0} x2={-28} y2={0} stroke={def.color} strokeWidth={4} />
+                </G>}
                 {plane.isLanding && <G>
                   <Line x1={-6} y1={-2} x2={-8} y2={8} stroke="#1d2830" strokeWidth={2} />
                   <Line x1={6} y1={-2} x2={4} y2={8} stroke="#1d2830" strokeWidth={2} />

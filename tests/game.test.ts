@@ -20,7 +20,7 @@ import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
-    const types: AircraftType[] = ['jet', 'propeller', 'supersonic', 'seaplane'];
+    const types: AircraftType[] = ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter'];
     types.forEach((t) => {
       const def = AIRCRAFT_DEFS[t];
       expect(def).toBeDefined();
@@ -46,6 +46,7 @@ describe('Aircraft Definitions', () => {
       'runway-main': '#00E5FF',
       'runway-diagonal': '#FFB300',
       'water-bay': '#00E676',
+      'helipad-h1': '#C86BFF',
     };
     Object.values(AIRCRAFT_DEFS).forEach((aircraft) => {
       expect(aircraft.color).toBe(runwayColors[aircraft.landingZoneId]);
@@ -63,10 +64,13 @@ describe('Aircraft Definitions', () => {
       { id: 'runway-main', name: 'R34', startX: 0, startY: 0, endX: 0, endY: 100, allowedTypes: ['jet', 'supersonic'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
       { id: 'runway-diagonal', name: 'R28', startX: 0, startY: 0, endX: 100, endY: 100, allowedTypes: ['propeller'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#FFB300', type: 'runway' },
       { id: 'water-bay', name: 'Bay', startX: 0, startY: 0, endX: 100, endY: 0, allowedTypes: ['seaplane'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E676', type: 'water' },
+      { id: 'helipad-h1', name: 'H1', startX: 50, startY: 50, endX: 50, endY: 50, allowedTypes: ['helicopter'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad' },
     ];
     expect(getAssignedRunway('supersonic', runways)?.id).toBe('runway-main');
     expect(isAssignedRunway('supersonic', runways[1])).toBe(false);
     expect(isAssignedRunway('seaplane', runways[2])).toBe(true);
+    expect(getAssignedRunway('helicopter', runways)?.id).toBe('helipad-h1');
+    expect(isAssignedRunway('helicopter', runways[0])).toBe(false);
   });
 });
 
@@ -83,6 +87,11 @@ describe('Game Levels Configuration', () => {
   it('allows seaplanes only in later levels', () => {
     expect(LEVELS[0].allowedTypes).not.toContain('seaplane');
     expect(LEVELS[1].allowedTypes).toContain('seaplane');
+  });
+
+  it('introduces helicopters immediately with a dedicated H1 assignment', () => {
+    expect(LEVELS[0].allowedTypes).toContain('helicopter');
+    expect(AIRCRAFT_DEFS.helicopter.landingZoneId).toBe('helipad-h1');
   });
 
   it('gives the training level enough time between aircraft', () => {
@@ -172,6 +181,20 @@ describe('Assisted runway approach', () => {
       runway,
     );
     expect(invalid.isLocked).toBe(false);
+  });
+
+  it('locks a helicopter route when it reaches the H1 pad from any direction', () => {
+    const helipad: RunwayZone = {
+      id: 'helipad-h1', name: 'H1', startX: 200, startY: 200, endX: 200, endY: 200,
+      allowedTypes: ['helicopter'], heading: 0, headingTolerance: Math.PI,
+      touchdownRadius: 34, color: '#C86BFF', type: 'helipad',
+    };
+    const route = validateLandingRoute(
+      { x: 320, y: 200 },
+      [{ x: 260, y: 200 }, { x: 202, y: 200 }],
+      helipad,
+    );
+    expect(route.isLocked).toBe(true);
   });
 
   it('excludes the near-aircraft pickup points from a straight player route', () => {

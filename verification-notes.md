@@ -9,3 +9,7 @@ The active browser build restores the high-fidelity HTML Canvas renderer. Its po
 ## Graphics and stage upgrade verification
 
 The browser preview was cleared of its old service worker and cache before reopening. The current training-sector board loads with the upgraded aircraft, bright runway thresholds, per-aircraft destination guide-beam system, and current coastal scenery. The staged scenes are supplied as independently cached progressive JPEGs: crosswind coast (135 KB), alpine peak (176 KB), and superstorm radar (101 KB). The browser build passed TypeScript validation and static web export before this preview.
+
+## Helicopter preview cache check
+
+The first iPhone screenshot was produced while the development preview still showed the prior render. Browser inspection confirmed a 420×934 active canvas, but the H1 artwork was absent from that old visual frame. The browser will be reloaded after cache invalidation before final visual acceptance; the source, TypeScript check, regression suite, and static export all include helicopter and H1 markers.

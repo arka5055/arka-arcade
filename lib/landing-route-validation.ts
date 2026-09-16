@@ -33,9 +33,10 @@ export function validateLandingRoute(
   const endpointDistance = Math.hypot(endpoint.x - runway.startX, endpoint.y - runway.startY);
   const finalHeading = Math.atan2(endpoint.y - previousPoint.y, endpoint.x - previousPoint.x);
   const headingDifference = shortestAngleDifference(finalHeading, runway.heading);
+  const isHelipad = runway.type === 'helipad';
 
   return {
-    isLocked: endpointDistance <= captureRadius && headingDifference <= runway.headingTolerance,
+    isLocked: endpointDistance <= captureRadius && (isHelipad || headingDifference <= runway.headingTolerance),
     endpointDistance,
     headingDifference,
     captureRadius,

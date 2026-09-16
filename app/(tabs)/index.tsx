@@ -285,6 +285,10 @@ export default function GameScreen() {
           <View style={[styles.legendIndicator, { backgroundColor: '#00E676' }]} />
           <Text style={styles.legendText}>SEA → BAY</Text>
         </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendIndicator, { backgroundColor: '#C86BFF' }]} />
+          <Text style={styles.legendText}>HELI → H1</Text>
+        </View>
       </View>
 
       {/* Game Over Modal */}
@@ -373,9 +377,13 @@ export default function GameScreen() {
                 {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Jets</Text> & <Text style={{ color: '#00E5FF' }}>Cyan Supersonic</Text> → Runway 34 (Center)
                 {'\n'}• <Text style={{ color: '#FFB300' }}>Amber Propellers</Text> → Runway 28 (Diagonal)
                 {'\n'}• <Text style={{ color: '#00E676' }}>Green Seaplanes</Text> → Blue Lagoon Bay
+                {'\n'}• <Text style={{ color: '#C86BFF' }}>Violet Helicopters</Text> → Helipad H1 (Square pad)
               </Text>
               <Text style={styles.infoParagraph}>
                 🎯 <Text style={styles.bold}>One Aircraft, One Runway:</Text> Every aircraft has one fixed, color-matched destination. A plane cannot lock or land on any other course.
+              </Text>
+              <Text style={styles.infoParagraph}>
+                🚁 <Text style={styles.bold}>Helipad Clearance:</Text> Helicopters can approach H1 from any direction. Draw their route to the violet square pad; the landing lock turns green as soon as the line reaches the pad.
               </Text>
               <Text style={styles.infoParagraph}>
                 ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.
@@ -637,8 +645,10 @@ const styles = StyleSheet.create({
   },
   bottomDock: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
     paddingVertical: 10,
     backgroundColor: '#061a29',
     borderRadius: 10,
@@ -657,7 +667,7 @@ const styles = StyleSheet.create({
   },
   legendText: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   modalBackdrop: {

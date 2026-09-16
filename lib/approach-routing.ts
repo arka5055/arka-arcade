@@ -5,6 +5,9 @@ import type { Point, RunwayZone } from '@/constants/game-types';
  * It sits behind the threshold, in the direction opposite the runway heading.
  */
 export function getApproachEntry(runway: RunwayZone, distance = 125): Point {
+  if (runway.type === 'helipad') {
+    return { x: runway.startX, y: runway.startY };
+  }
   return {
     x: runway.startX - Math.cos(runway.heading) * distance,
     y: runway.startY - Math.sin(runway.heading) * distance,
