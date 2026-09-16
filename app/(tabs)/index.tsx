@@ -40,9 +40,16 @@ export default function GameScreen() {
   const [showAchievementsModal, setShowAchievementsModal] = useState(false);
 
   const comboTimerRef = useRef<any>(null);
+  const authoritativeScoreRef = useRef(0);
 
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
   const trafficLoad = ['LOW', 'MODERATE', 'HIGH', 'EXTREME'][levelIndex] || 'EXTREME';
+  const legendItems: Array<{ type: AircraftType; color: string; label: string }> = [
+    { type: 'jet' as AircraftType, color: '#00E5FF', label: 'JET / SST → R34' },
+    { type: 'propeller' as AircraftType, color: '#FFB300', label: 'PROP → R28' },
+    { type: 'seaplane' as AircraftType, color: '#00E676', label: 'SEA → BAY' },
+    { type: 'helicopter' as AircraftType, color: '#C86BFF', label: 'HELI → H1' },
+  ].filter((item) => currentLevel.allowedTypes.includes(item.type));
 
   useEffect(() => {
     loadGameStats().then(setStats);
@@ -54,12 +61,14 @@ export default function GameScreen() {
         const nextCombo = prevCombo + 1;
         const comboMultiplier = 1 + Math.min(nextCombo * 0.1, 1.5);
         const finalGain = Math.round(scoreGain * comboMultiplier);
+        const nextScore = authoritativeScoreRef.current + finalGain;
+        authoritativeScoreRef.current = nextScore;
 
-        setScore((s) => s + finalGain);
+        setScore(nextScore);
         setLandings(totalLandings);
 
         setStats((prevStats) => {
-          const newHigh = Math.max(prevStats.highScore, score + finalGain);
+          const newHigh = Math.max(prevStats.highScore, nextScore);
           const newCombo = Math.max(prevStats.bestCombo, nextCombo);
           const newLandings = prevStats.totalLandings + 1;
 
@@ -98,10 +107,11 @@ export default function GameScreen() {
         return nextCombo;
       });
     },
-    [score]
+    []
   );
 
-  const handleGameOver = useCallback((reason: string, finalScore: number, finalLandings: number) => {
+  const handleGameOver = useCallback((reason: string, _finalScore: number, _finalLandings: number) => {
+    const finalScore = authoritativeScoreRef.current;
     setGameOverReason(reason);
     setShowGameOver(true);
     setStats((prev) => {
@@ -135,11 +145,16 @@ export default function GameScreen() {
     });
   }, []);
 
+  const handleAutoPause = useCallback(() => {
+    setIsPaused(true);
+  }, []);
+
   const restartCurrentGame = () => {
     if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
     setShowGameOver(false);
     setShowLevelComplete(false);
     setScore(0);
+    authoritativeScoreRef.current = 0;
     setLandings(0);
     setCombo(0);
     setIsPaused(false);
@@ -149,6 +164,7 @@ export default function GameScreen() {
   const nextLevelProceed = () => {
     setShowLevelComplete(false);
     setScore(0);
+    authoritativeScoreRef.current = 0;
     setLandings(0);
     setCombo(0);
     setIsPaused(false);
@@ -175,7 +191,7 @@ export default function GameScreen() {
         <View style={styles.titleGroup}>
           <Text style={styles.appName}>SKYLINE SIGNAL</Text>
           <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>{currentLevel.title.toUpperCase()} · {trafficLoad} TRAFFIC</Text>
+            <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {currentLevel.title.toUpperCase()} · {trafficLoad}</Text>
           </View>
         </View>
 
@@ -184,6 +200,8 @@ export default function GameScreen() {
             style={styles.iconButton}
             onPress={toggleSound}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={soundEnabled ? 'Mute game sounds' : 'Enable game sounds'}
           >
             <Text style={styles.iconButtonText}>{soundEnabled ? '🔊' : '🔇'}</Text>
           </TouchableOpacity>
@@ -192,6 +210,8 @@ export default function GameScreen() {
             style={styles.iconButton}
             onPress={() => setShowAchievementsModal(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Open career record"
           >
             <Text style={styles.iconButtonText}>🏆</Text>
           </TouchableOpacity>
@@ -200,6 +220,8 @@ export default function GameScreen() {
             style={styles.iconButton}
             onPress={() => setShowInfoModal(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Open controller briefing"
           >
             <Text style={styles.iconButtonText}>ℹ️</Text>
           </TouchableOpacity>
@@ -208,6 +230,8 @@ export default function GameScreen() {
             style={[styles.iconButton, isPaused && styles.activePause]}
             onPress={() => setIsPaused(!isPaused)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={isPaused ? 'Resume radar control' : 'Pause radar control'}
           >
             <Text style={styles.iconButtonText}>{isPaused ? '▶️' : '⏸️'}</Text>
           </TouchableOpacity>
@@ -254,6 +278,7 @@ export default function GameScreen() {
           onPlaneLanded={handlePlaneLanded}
           onGameOver={handleGameOver}
           onLevelComplete={handleLevelComplete}
+          onAutoPause={handleAutoPause}
         />
 
         {isPaused && (
@@ -273,22 +298,12 @@ export default function GameScreen() {
 
       {/* Runway Legend Bottom Dock */}
       <View style={styles.bottomDock}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendIndicator, { backgroundColor: '#00E5FF' }]} />
-          <Text style={styles.legendText}>JET / SST → R34</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendIndicator, { backgroundColor: '#FFB300' }]} />
-          <Text style={styles.legendText}>PROP → R28</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendIndicator, { backgroundColor: '#00E676' }]} />
-          <Text style={styles.legendText}>SEA → BAY</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendIndicator, { backgroundColor: '#C86BFF' }]} />
-          <Text style={styles.legendText}>HELI → H1</Text>
-        </View>
+        {legendItems.map((item) => (
+          <View style={styles.legendItem} key={item.type}>
+            <View style={[styles.legendIndicator, { backgroundColor: item.color }]} />
+            <Text style={styles.legendText}>{item.label}</Text>
+          </View>
+        ))}
       </View>
 
       {/* Game Over Modal */}
@@ -536,12 +551,12 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
   },
   iconButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    minWidth: 36,
-    minHeight: 36,
+    minWidth: 42,
+    minHeight: 42,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,

@@ -22,6 +22,12 @@ import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from
 import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor } from '../lib/traffic-conflicts';
 import { blendLandingHeading, isForwardAlongRunway } from '../lib/landing-motion';
+import {
+  cloneRouteSnapshot,
+  hasRouteEditIntent,
+  restoreRouteSnapshot,
+} from '../lib/route-editing';
+import { canSpawnInSector, getActiveAircraftBudget } from '../lib/traffic-director';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -136,6 +142,28 @@ describe('Spawn scheduler', () => {
 
   it('works with animation-clock values rather than wall-clock epoch values', () => {
     expect(shouldSpawnAircraft(18_100, 9_000, 9_000)).toBe(true);
+  });
+
+  it('defers incoming traffic once a small-screen sector reaches its safe aircraft budget', () => {
+    const active = Array.from({ length: getActiveAircraftBudget(0) }, (_, index) => ({
+      id: `active-${index}`,
+      type: 'jet' as const,
+      x: 20,
+      y: 20,
+      heading: 0,
+      targetHeading: 0,
+      speed: 20,
+      path: [],
+      landingCleared: false,
+      isLanding: false,
+      landingProgress: 0,
+      warningLevel: 'safe' as const,
+      landed: false,
+      createdAt: 0,
+    }));
+    expect(canSpawnInSector(active, 0)).toBe(false);
+    expect(canSpawnInSector(active.slice(0, -1), 0)).toBe(true);
+    expect(getActiveAircraftBudget(3)).toBeGreaterThan(getActiveAircraftBudget(0));
   });
 });
 
@@ -354,6 +382,18 @@ describe('Assisted runway approach', () => {
     const route = preservePlayerDrawnRoute(aircraft, drawing);
     route[0].x = 999;
     expect(drawing).toEqual(original);
+  });
+
+  it('treats a tap as selection and restores an aborted route edit exactly', () => {
+    const existingPath = [{ x: 120, y: 50 }, { x: 200, y: 100 }];
+    const snapshot = cloneRouteSnapshot(existingPath, true);
+    expect(hasRouteEditIntent({ x: 50, y: 50 }, { x: 58, y: 50 })).toBe(false);
+    expect(hasRouteEditIntent({ x: 50, y: 50 }, { x: 65, y: 50 })).toBe(true);
+    existingPath[0].x = 999;
+    expect(restoreRouteSnapshot(snapshot)).toEqual({
+      path: [{ x: 120, y: 50 }, { x: 200, y: 100 }],
+      landingCleared: true,
+    });
   });
 
   it('recognizes a touch near an active route line for redrawing', () => {

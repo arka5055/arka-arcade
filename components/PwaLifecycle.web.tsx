@@ -12,12 +12,23 @@ export function PwaLifecycle() {
   useEffect(() => {
     const launchScreen = document.getElementById('skyline-launch-screen');
     if (!launchScreen) return;
-    const fade = window.setTimeout(() => {
+    let hasDismissed = false;
+    const dismiss = () => {
+      if (hasDismissed) return;
+      hasDismissed = true;
       launchScreen.style.transition = 'opacity 180ms ease-out';
       launchScreen.style.opacity = '0';
       window.setTimeout(() => launchScreen.remove(), 210);
-    }, 80);
-    return () => window.clearTimeout(fade);
+    };
+    const readyWindow = window as typeof window & { __skylineInteractive?: boolean };
+    if (readyWindow.__skylineInteractive) dismiss();
+    window.addEventListener('skyline-interactive', dismiss, { once: true });
+    // Avoid a permanent overlay if the browser rejects canvas rendering for any reason.
+    const safetyFallback = window.setTimeout(dismiss, 2200);
+    return () => {
+      window.removeEventListener('skyline-interactive', dismiss);
+      window.clearTimeout(safetyFallback);
+    };
   }, []);
 
   return null;

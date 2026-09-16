@@ -30,6 +30,13 @@ import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
 import { blendLandingHeading, isForwardAlongRunway } from '@/lib/landing-motion';
+import { canSpawnInSector } from '@/lib/traffic-director';
+import {
+  cloneRouteSnapshot,
+  hasRouteEditIntent,
+  restoreRouteSnapshot,
+  type RouteSnapshot,
+} from '@/lib/route-editing';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -43,6 +50,7 @@ interface AirTrafficCanvasProps {
   onPlaneLanded: (type: AircraftType, scoreGain: number, totalLandings: number) => void;
   onGameOver: (reason: string, finalScore: number, finalLandings: number) => void;
   onLevelComplete: (level: number) => void;
+  onAutoPause: () => void;
 }
 
 export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
@@ -52,6 +60,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   onPlaneLanded,
   onGameOver,
   onLevelComplete,
+  onAutoPause,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<View | null>(null);
@@ -66,6 +75,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const selectedPlaneIdRef = useRef<string | null>(null);
   const activeDrawPathRef = useRef<Point[]>([]);
   const routeStartPointRef = useRef<Point | null>(null);
+  const gestureStartPointRef = useRef<Point | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+  const routeSnapshotRef = useRef<RouteSnapshot | null>(null);
+  const isEditingRouteRef = useRef(false);
+  const draftLandingClearedRef = useRef(false);
   // The animation loop passes performance.now(), so the spawn marker must use that same clock.
   const lastSpawnTimeRef = useRef<number>(performance.now());
   const scoreRef = useRef<number>(0);
@@ -78,9 +92,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const runwaysRef = useRef<RunwayZone[]>([]);
   const warningBeepCooldownRef = useRef<number>(0);
   const sceneryImageRef = useRef<HTMLImageElement | null>(null);
+  const spawnAircraftRef = useRef<() => void>(() => undefined);
   const crashEffectRef = useRef<CrashEffect | null>(null);
   const crashReportedRef = useRef(false);
   const activeConflictsRef = useRef<TrafficConflict[]>([]);
+  const sectorCompleteRef = useRef(false);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
@@ -167,6 +183,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   // Spawn aircraft from perimeter
   const spawnAircraft = useCallback(() => {
     if (isGameOverRef.current) return;
+    if (!canSpawnInSector(planesRef.current, levelIndex)) return;
     const w = dimensions.width;
     const h = dimensions.height;
     if (w <= 0 || h <= 0) return;
@@ -225,7 +242,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     planesRef.current.push(newPlane);
     sounds.playRadarPing();
-  }, [dimensions, currentLevel]);
+  }, [dimensions, currentLevel, levelIndex]);
+
+  useEffect(() => {
+    spawnAircraftRef.current = spawnAircraft;
+  }, [spawnAircraft]);
 
   // Handle plane collision logic & proximity warning
   const checkCollisionsAndWarnings = useCallback(() => {
@@ -286,7 +307,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
     }
 
-    activeConflictsRef.current = conflicts;
+    // Several route pairs can converge at once. Spotlighting the most urgent pair gives
+    // the controller one clear action instead of turning the entire board into an alarm.
+    activeConflictsRef.current = conflicts
+      .sort((left, right) => {
+        const severityGap = (right.severity === 'critical' ? 1 : 0) - (left.severity === 'critical' ? 1 : 0);
+        if (severityGap !== 0) return severityGap;
+        return Math.min(left.distance, left.projectedDistance) - Math.min(right.distance, right.projectedDistance);
+      })
+      .slice(0, 1);
 
     if (hasCritical && warningBeepCooldownRef.current <= 0) {
       sounds.playWarning();
@@ -354,6 +383,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
           // Check level complete
           if (landingsCountRef.current >= currentLevel.targetLandings) {
+            sectorCompleteRef.current = true;
             onLevelComplete(levelIndex + 1);
           }
         }
@@ -882,10 +912,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     }
 
     // Active touch drawing path
-    if (activeDrawPathRef.current.length > 1) {
+    if (isEditingRouteRef.current && activeDrawPathRef.current.length > 0) {
       ctx.save();
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
-      const isLandingLocked = Boolean(selectedPlane?.landingCleared);
+      const isLandingLocked = draftLandingClearedRef.current;
       ctx.lineWidth = isLandingLocked ? 4 : 3.5;
       ctx.strokeStyle = isLandingLocked ? '#00E676' : '#ffffff';
       ctx.setLineDash([5, 5]);
@@ -916,6 +946,26 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.fillText(lockText, endpoint.x, endpoint.y - 19);
+      } else {
+        const endpoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+        const runway = selectedPlane && getAssignedRunway(selectedPlane.type, runwaysRef.current);
+        if (runway) {
+          const target = runway.id === 'runway-main' ? 'R34'
+            : runway.id === 'runway-diagonal' ? 'R28'
+              : runway.id === 'helipad-h1' ? 'H1' : 'BAY';
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
+          ctx.font = '800 9px -apple-system, system-ui, sans-serif';
+          const hint = `DRAW TO ${target} THRESHOLD`;
+          const hintWidth = ctx.measureText(hint).width + 12;
+          ctx.fillRect(endpoint.x - hintWidth / 2, endpoint.y - 29, hintWidth, 15);
+          ctx.strokeStyle = runway.color;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(endpoint.x - hintWidth / 2, endpoint.y - 29, hintWidth, 15);
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(hint, endpoint.x, endpoint.y - 18);
+        }
       }
       ctx.restore();
     }
@@ -1312,16 +1362,19 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
               : 'SEA → BAY';
       ctx.save();
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-      const routeWidth = ctx.measureText(routeLabel).width + 12;
-      const tagY = p.y - 35;
-      ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
-      ctx.fillRect(p.x - routeWidth / 2, tagY, routeWidth, 16);
+      const isSelected = selectedPlaneIdRef.current === p.id;
+      const tagText = isSelected ? `SELECTED · ${routeLabel}` : routeLabel;
+      const routeWidth = ctx.measureText(tagText).width + 12;
+      const tagX = Math.max(routeWidth / 2 + 4, Math.min(w - routeWidth / 2 - 4, p.x));
+      const tagY = Math.max(5, Math.min(h - (landing ? 40 : 22), p.y - 35));
+      ctx.fillStyle = isSelected ? 'rgba(0, 62, 77, 0.96)' : 'rgba(3, 12, 20, 0.90)';
+      ctx.fillRect(tagX - routeWidth / 2, tagY, routeWidth, 16);
       ctx.strokeStyle = def.color;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(p.x - routeWidth / 2, tagY, routeWidth, 16);
+      ctx.lineWidth = isSelected ? 2.4 : 1.5;
+      ctx.strokeRect(tagX - routeWidth / 2, tagY, routeWidth, 16);
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(routeLabel, p.x, tagY + 11.5);
+      ctx.fillText(tagText, tagX, tagY + 11.5);
       if (landing) {
         ctx.font = '800 8px -apple-system, system-ui, sans-serif';
         const phaseWidth = ctx.measureText(landing.label).width + 10;
@@ -1330,9 +1383,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           : landing.stage === 'braking'
             ? 'rgba(255, 97, 97, 0.94)'
             : 'rgba(0, 229, 255, 0.90)';
-        ctx.fillRect(p.x - phaseWidth / 2, tagY + 18, phaseWidth, 13);
+        ctx.fillRect(tagX - phaseWidth / 2, tagY + 18, phaseWidth, 13);
         ctx.fillStyle = '#07121d';
-        ctx.fillText(landing.label, p.x, tagY + 27.5);
+        ctx.fillText(landing.label, tagX, tagY + 27.5);
       }
       ctx.restore();
     });
@@ -1415,7 +1468,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           crashReportedRef.current = true;
           onGameOver('Mid-air Collision!', scoreRef.current, landingsCountRef.current);
         }
-      } else if (!isPaused && !isGameOverRef.current) {
+      } else if (!isPaused && !isGameOverRef.current && !sectorCompleteRef.current) {
         cloudDriftRef.current = (cloudDriftRef.current + dt * 0.035) % 1.35;
         // Spawn schedule
         const pressure = getTrafficPressure(landingsCountRef.current, currentLevel.targetLandings);
@@ -1442,9 +1495,29 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     };
   }, [isPaused, currentLevel, spawnAircraft, updatePhysics, checkCollisionsAndWarnings, draw]);
 
-  // Touch / Pointer Event Handlers for Web Canvas and Mobile Gestures
-  const handlePointerDown = (clientX: number, clientY: number) => {
+  // Touch route editing is transactional: selection never destroys the existing course.
+  // Only a deliberate, captured drag can replace it; cancellation restores the exact snapshot.
+  const cancelRouteEdit = useCallback(() => {
+    const selectedId = selectedPlaneIdRef.current;
+    const selected = planesRef.current.find((plane) => plane.id === selectedId);
+    const snapshot = routeSnapshotRef.current;
+    if (selected && snapshot && isEditingRouteRef.current) {
+      const restored = restoreRouteSnapshot(snapshot);
+      selected.path = restored.path;
+      selected.landingCleared = restored.landingCleared;
+    }
+    activeDrawPathRef.current = [];
+    routeStartPointRef.current = null;
+    gestureStartPointRef.current = null;
+    activePointerIdRef.current = null;
+    routeSnapshotRef.current = null;
+    isEditingRouteRef.current = false;
+    draftLandingClearedRef.current = false;
+  }, []);
+
+  const handlePointerDown = (clientX: number, clientY: number, pointerId: number) => {
     if (isPaused || isGameOverRef.current) return;
+    if (activePointerIdRef.current !== null) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1465,6 +1538,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     }
 
     if (!closestPlane) {
+      let nearestRouteDistance = 28;
       for (const plane of planesRef.current) {
         if (plane.isLanding || plane.landed || plane.path.length === 0) continue;
         const pathPoints = [{ x: plane.x, y: plane.y }, ...plane.path];
@@ -1474,23 +1548,24 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
             pathPoints[pathIndex],
             pathPoints[pathIndex + 1],
           );
-          if (lineDistance < 26) {
+          if (lineDistance < nearestRouteDistance) {
+            nearestRouteDistance = lineDistance;
             closestPlane = plane;
-            break;
           }
         }
-        if (closestPlane) break;
       }
     }
 
     if (closestPlane) {
       selectedPlaneIdRef.current = closestPlane.id;
-      // The first press selects the aircraft. It must never be interpreted as a
-      // route point, otherwise a straight drag can briefly command a U-turn.
+      // Keep the complete existing route intact until an intentional drag has ended.
       routeStartPointRef.current = { x: closestPlane.x, y: closestPlane.y };
+      gestureStartPointRef.current = { x, y };
+      activePointerIdRef.current = pointerId;
+      routeSnapshotRef.current = cloneRouteSnapshot(closestPlane.path, closestPlane.landingCleared);
       activeDrawPathRef.current = [];
-      closestPlane.path = [];
-      closestPlane.landingCleared = false;
+      isEditingRouteRef.current = false;
+      draftLandingClearedRef.current = false;
       sounds.playSelect();
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1499,25 +1574,32 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       selectedPlaneIdRef.current = null;
       activeDrawPathRef.current = [];
       routeStartPointRef.current = null;
+      gestureStartPointRef.current = null;
+      activePointerIdRef.current = null;
+      routeSnapshotRef.current = null;
     }
   };
 
-  const handlePointerMove = (clientX: number, clientY: number) => {
-    if (!selectedPlaneIdRef.current) return;
+  const handlePointerMove = (clientX: number, clientY: number, pointerId: number) => {
+    if (!selectedPlaneIdRef.current || activePointerIdRef.current !== pointerId) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    const path = activeDrawPathRef.current;
-    if (path.length === 0) {
-      path.push({ x, y });
+    const currentPoint = { x, y };
+    const gestureStart = gestureStartPointRef.current;
+    if (!isEditingRouteRef.current) {
+      if (!gestureStart || !hasRouteEditIntent(gestureStart, currentPoint)) return;
+      isEditingRouteRef.current = true;
+      activeDrawPathRef.current = [currentPoint];
     } else {
+      const path = activeDrawPathRef.current;
       const last = path[path.length - 1];
       const dist = Math.sqrt((last.x - x) * (last.x - x) + (last.y - y) * (last.y - y));
       if (dist > 8) {
-        path.push({ x, y });
+        path.push(currentPoint);
       }
     }
 
@@ -1525,18 +1607,19 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const routeStart = routeStartPointRef.current;
     const matchingRunway = plane && getAssignedRunway(plane.type, runwaysRef.current);
     if (plane && routeStart && matchingRunway) {
-      const candidateRoute = preservePlayerDrawnRoute(routeStart, path);
-      plane.landingCleared = validateLandingRoute(plane, candidateRoute, matchingRunway).isLocked;
+      const candidateRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
+      draftLandingClearedRef.current = validateLandingRoute(routeStart, candidateRoute, matchingRunway).isLocked;
     }
   };
 
-  const handlePointerUp = (clientX?: number, clientY?: number) => {
+  const handlePointerUp = (pointerId: number, clientX?: number, clientY?: number) => {
+    if (activePointerIdRef.current !== pointerId) return;
     if (typeof clientX === 'number' && typeof clientY === 'number') {
-      handlePointerMove(clientX, clientY);
+      handlePointerMove(clientX, clientY, pointerId);
     }
     if (selectedPlaneIdRef.current) {
       const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
-      if (plane) {
+      if (plane && isEditingRouteRef.current) {
         const routeStart = routeStartPointRef.current ?? { x: plane.x, y: plane.y };
         const playerRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
         if (playerRoute.length > 0) {
@@ -1545,23 +1628,68 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           plane.path = playerRoute;
           const matchingRunway = getAssignedRunway(plane.type, runwaysRef.current);
           plane.landingCleared = Boolean(matchingRunway
-            && validateLandingRoute(plane, playerRoute, matchingRunway).isLocked);
+            && validateLandingRoute(routeStart, playerRoute, matchingRunway).isLocked);
           sounds.playSelect();
-        } else {
-          plane.landingCleared = false;
+        } else if (routeSnapshotRef.current) {
+          const restored = restoreRouteSnapshot(routeSnapshotRef.current);
+          plane.path = restored.path;
+          plane.landingCleared = restored.landingCleared;
         }
       }
     }
-    selectedPlaneIdRef.current = null;
     activeDrawPathRef.current = [];
     routeStartPointRef.current = null;
+    gestureStartPointRef.current = null;
+    activePointerIdRef.current = null;
+    routeSnapshotRef.current = null;
+    isEditingRouteRef.current = false;
+    draftLandingClearedRef.current = false;
   };
+
+  // Installed PWA sessions can be interrupted by a call, lock screen, or app switch.
+  // Pause before the browser throttles RAF and restore any unfinished route edit exactly.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const pauseForInterruption = () => {
+      cancelRouteEdit();
+      onAutoPause();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) pauseForInterruption();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', pauseForInterruption);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', pauseForInterruption);
+    };
+  }, [cancelRouteEdit, onAutoPause]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width > 50 && height > 50) {
-      setDimensions({ width, height });
+      setDimensions((previous) => {
+        if (previous.width === width && previous.height === height) return previous;
+        const scaleX = width / previous.width;
+        const scaleY = height / previous.height;
+        const scalePoint = (point: Point): Point => ({ x: point.x * scaleX, y: point.y * scaleY });
+        planesRef.current.forEach((plane) => {
+          const position = scalePoint(plane);
+          plane.x = position.x;
+          plane.y = position.y;
+          plane.path = plane.path.map(scalePoint);
+          if (plane.landingEntry) plane.landingEntry = scalePoint(plane.landingEntry);
+        });
+        activeDrawPathRef.current = activeDrawPathRef.current.map(scalePoint);
+        if (routeStartPointRef.current) routeStartPointRef.current = scalePoint(routeStartPointRef.current);
+        if (gestureStartPointRef.current) gestureStartPointRef.current = scalePoint(gestureStartPointRef.current);
+        return { width, height };
+      });
       updateRunwayCoordinates(width, height);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        (window as typeof window & { __skylineInteractive?: boolean }).__skylineInteractive = true;
+        window.dispatchEvent(new Event('skyline-interactive'));
+      }
     }
   };
 
@@ -1577,12 +1705,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     scoreRef.current = 0;
     crashEffectRef.current = null;
     crashReportedRef.current = false;
+    activeConflictsRef.current = [];
+    sectorCompleteRef.current = false;
+    cancelRouteEdit();
     lastSpawnTimeRef.current = performance.now();
     const firstFlight = setTimeout(() => {
-      spawnAircraft();
+      spawnAircraftRef.current();
     }, 180);
     return () => clearTimeout(firstFlight);
-  }, [levelIndex, spawnAircraft]);
+  }, [levelIndex, cancelRouteEdit]);
 
   return (
     <View ref={containerRef} style={styles.container} onLayout={onLayout}>
@@ -1597,19 +1728,26 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
             display: 'block',
             touchAction: 'none',
           }}
-          onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
-          onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-          onMouseUp={(e) => handlePointerUp(e.clientX, e.clientY)}
-          onTouchStart={(e) => {
-            if (e.touches[0]) handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+          onPointerDown={(event: any) => {
+            if (event.isPrimary === false) return;
+            handlePointerDown(event.clientX, event.clientY, event.pointerId);
+            if (activePointerIdRef.current === event.pointerId) {
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+            }
           }}
-          onTouchMove={(e) => {
-            if (e.touches[0]) handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+          onPointerMove={(event: any) => {
+            if (event.isPrimary === false) return;
+            handlePointerMove(event.clientX, event.clientY, event.pointerId);
           }}
-          onTouchEnd={(e) => {
-            const lastTouch = e.changedTouches[0];
-            handlePointerUp(lastTouch?.clientX, lastTouch?.clientY);
+          onPointerUp={(event: any) => {
+            if (event.isPrimary === false) return;
+            handlePointerUp(event.pointerId, event.clientX, event.clientY);
+            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+              event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }
           }}
+          onPointerCancel={cancelRouteEdit}
+          onLostPointerCapture={cancelRouteEdit}
         />
       ) : (
         <View style={{ width: dimensions.width, height: dimensions.height }} />
