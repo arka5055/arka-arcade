@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AIRCRAFT_DEFS, LEVELS, AircraftType } from '../constants/game-types';
+import { AIRCRAFT_DEFS, LEVELS, AircraftType, RunwayZone } from '../constants/game-types';
 import { shouldSpawnAircraft } from '../lib/game-timing';
 import {
   distanceToLineSegment,
@@ -16,6 +16,7 @@ import {
   STAGE_ENVIRONMENTS,
 } from '../lib/stage-environments';
 import { createCrashEffect, getCrashProgress } from '../lib/crash-effects';
+import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -38,6 +39,34 @@ describe('Aircraft Definitions', () => {
     Object.values(AIRCRAFT_DEFS).forEach((aircraft) => {
       expect(aircraft.speed).toBeLessThanOrEqual(50);
     });
+  });
+
+  it('matches every aircraft livery to its one assigned runway color', () => {
+    const runwayColors: Record<string, string> = {
+      'runway-main': '#00E5FF',
+      'runway-diagonal': '#FFB300',
+      'water-bay': '#00E676',
+    };
+    Object.values(AIRCRAFT_DEFS).forEach((aircraft) => {
+      expect(aircraft.color).toBe(runwayColors[aircraft.landingZoneId]);
+    });
+  });
+
+  it('keeps the aircraft classes visibly distinct in size and speed', () => {
+    expect(AIRCRAFT_DEFS.supersonic.speed).toBeGreaterThan(AIRCRAFT_DEFS.jet.speed);
+    expect(AIRCRAFT_DEFS.jet.length).toBeGreaterThan(AIRCRAFT_DEFS.propeller.length);
+    expect(AIRCRAFT_DEFS.seaplane.wingspan).toBeGreaterThan(AIRCRAFT_DEFS.propeller.wingspan);
+  });
+
+  it('allows a flight to use exactly its assigned runway and rejects every other runway', () => {
+    const runways: RunwayZone[] = [
+      { id: 'runway-main', name: 'R34', startX: 0, startY: 0, endX: 0, endY: 100, allowedTypes: ['jet', 'supersonic'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
+      { id: 'runway-diagonal', name: 'R28', startX: 0, startY: 0, endX: 100, endY: 100, allowedTypes: ['propeller'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#FFB300', type: 'runway' },
+      { id: 'water-bay', name: 'Bay', startX: 0, startY: 0, endX: 100, endY: 0, allowedTypes: ['seaplane'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E676', type: 'water' },
+    ];
+    expect(getAssignedRunway('supersonic', runways)?.id).toBe('runway-main');
+    expect(isAssignedRunway('supersonic', runways[1])).toBe(false);
+    expect(isAssignedRunway('seaplane', runways[2])).toBe(true);
   });
 });
 

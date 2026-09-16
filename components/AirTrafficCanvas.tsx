@@ -25,6 +25,7 @@ import {
   getTrafficPressure,
 } from '@/lib/stage-environments';
 import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/crash-effects';
+import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -288,7 +289,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         p.speed = Math.max(6, p.speed * (1 - dt * 1.15));
 
         // Follow runway centerline to completion
-        const targetRunway = runways.find(r => r.allowedTypes.includes(p.type));
+        const targetRunway = getAssignedRunway(p.type, runways);
         if (targetRunway) {
           const rollout = 1 - Math.pow(1 - Math.min(p.landingProgress, 1), 2);
           const rx = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * rollout;
@@ -348,21 +349,16 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       p.x += Math.cos(p.heading) * p.speed * dt;
       p.y += Math.sin(p.heading) * p.speed * dt;
 
-      // Check Runway Touchdown Gates
-      for (const runway of runways) {
-        if (!runway.allowedTypes.includes(p.type)) continue;
+      // A flight can only capture the one runway assigned to its aircraft type.
+      const assignedRunway = getAssignedRunway(p.type, runways);
+      if (assignedRunway && isInsideAutoLandingCapture(p, assignedRunway)) {
+        let angleDiff = Math.abs(p.heading - assignedRunway.heading);
+        while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
 
-        if (isInsideAutoLandingCapture(p, runway)) {
-          // Check approach angle
-          let angleDiff = Math.abs(p.heading - runway.heading);
-          while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
-
-          if (angleDiff <= runway.headingTolerance) {
-            p.isLanding = true;
-            p.path = [];
-            p.heading = runway.heading;
-            break;
-          }
+        if (angleDiff <= assignedRunway.headingTolerance) {
+          p.isLanding = true;
+          p.path = [];
+          p.heading = assignedRunway.heading;
         }
       }
 
@@ -523,7 +519,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // 3. Draw runways, bright approach gates and unambiguous destination labels.
     runwaysRef.current.forEach(runway => {
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
-      const isSuggestedRunway = Boolean(selectedPlane && runway.allowedTypes.includes(selectedPlane.type));
+      const isSuggestedRunway = Boolean(selectedPlane && isAssignedRunway(selectedPlane.type, runway));
       const approachEntry = getApproachEntry(runway);
       // Runway asphalt strip
       ctx.save();
@@ -631,7 +627,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // immediate one-to-one association from the aircraft to its exact landing course.
     planesRef.current.forEach((plane) => {
       if (plane.isLanding) return;
-      const destination = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+      const destination = getAssignedRunway(plane.type, runwaysRef.current);
       if (!destination) return;
       const approach = getApproachEntry(destination, 86);
       const isSelected = selectedPlaneIdRef.current === plane.id;
@@ -837,13 +833,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       // Metallic fuselage surface with a bright upper highlight.
       const fuselage = ctx.createLinearGradient(-def.length * 0.52, -7, def.length * 0.56, 8);
-      fuselage.addColorStop(0, '#6c8496');
-      fuselage.addColorStop(0.35, '#f3f8fb');
-      fuselage.addColorStop(0.62, def.color);
-      fuselage.addColorStop(1, '#15364c');
+      fuselage.addColorStop(0, def.color);
+      fuselage.addColorStop(0.24, '#e8f7fb');
+      fuselage.addColorStop(0.48, def.color);
+      fuselage.addColorStop(1, def.color);
       ctx.fillStyle = fuselage;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = def.color;
+      ctx.shadowColor = def.color;
+      ctx.shadowBlur = 5;
+      ctx.lineWidth = 1.8;
 
       if (p.type === 'supersonic') {
         // Delta wing supersonic jet
@@ -922,7 +920,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const flame = ctx.createLinearGradient(-def.length * 0.38, 0, -def.length * 0.38 - flameLength, 0);
         flame.addColorStop(0, 'rgba(248, 252, 255, 0.95)');
         flame.addColorStop(0.38, 'rgba(0, 229, 255, 0.78)');
-        flame.addColorStop(1, 'rgba(255, 61, 113, 0)');
+        flame.addColorStop(1, 'rgba(0, 229, 255, 0)');
         ctx.fillStyle = flame;
         ctx.beginPath();
         ctx.moveTo(-def.length * 0.36, -4);
@@ -1216,7 +1214,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     const plane = planesRef.current.find((item) => item.id === selectedPlaneIdRef.current);
     const routeStart = routeStartPointRef.current;
-    const matchingRunway = plane && runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+    const matchingRunway = plane && getAssignedRunway(plane.type, runwaysRef.current);
     if (plane && routeStart && matchingRunway) {
       const candidateRoute = preservePlayerDrawnRoute(routeStart, path);
       plane.landingCleared = validateLandingRoute(plane, candidateRoute, matchingRunway).isLocked;
@@ -1236,7 +1234,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           // Player intent wins: retain each point drawn with the finger, without replacing it
           // with an automatic runway approach. Landing capture still validates the final angle.
           plane.path = playerRoute;
-          const matchingRunway = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+          const matchingRunway = getAssignedRunway(plane.type, runwaysRef.current);
           plane.landingCleared = Boolean(matchingRunway
             && validateLandingRoute(plane, playerRoute, matchingRunway).isLocked);
           sounds.playSelect();

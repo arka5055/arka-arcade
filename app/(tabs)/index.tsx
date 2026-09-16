@@ -370,9 +370,12 @@ export default function GameScreen() {
               </Text>
               <Text style={styles.infoParagraph}>
                 🛬 <Text style={styles.bold}>Match Corridors:</Text>
-                {'\n'}• <Text style={{ color: '#00E5FF' }}>Blue Jets</Text> & <Text style={{ color: '#FF3D71' }}>Red Supersonic</Text> → Runway 34 (Center)
+                {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Jets</Text> & <Text style={{ color: '#00E5FF' }}>Cyan Supersonic</Text> → Runway 34 (Center)
                 {'\n'}• <Text style={{ color: '#FFB300' }}>Amber Propellers</Text> → Runway 28 (Diagonal)
                 {'\n'}• <Text style={{ color: '#00E676' }}>Green Seaplanes</Text> → Blue Lagoon Bay
+              </Text>
+              <Text style={styles.infoParagraph}>
+                🎯 <Text style={styles.bold}>One Aircraft, One Runway:</Text> Every aircraft has one fixed, color-matched destination. A plane cannot lock or land on any other course.
               </Text>
               <Text style={styles.infoParagraph}>
                 ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.

@@ -26,6 +26,7 @@ import {
   distanceToLineSegment,
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
+import { getAssignedRunway } from '@/lib/runway-assignment';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -131,7 +132,7 @@ export function AirTrafficCanvas({
 
       setPlanes((previous) => {
         const next = previous.flatMap((plane) => {
-          const assignedRunway = runways.find((item) => item.allowedTypes.includes(plane.type));
+          const assignedRunway = getAssignedRunway(plane.type, runways);
           if (plane.isLanding && assignedRunway) {
             const landingProgress = Math.min(1, plane.landingProgress + 0.06);
             const rollout = 1 - Math.pow(1 - landingProgress, 2);
@@ -176,7 +177,7 @@ export function AirTrafficCanvas({
             path: target && Math.hypot(target.x - plane.x, target.y - plane.y) < 24 ? plane.path.slice(1) : plane.path,
           };
 
-          const runway = runways.find((item) => item.allowedTypes.includes(moved.type));
+          const runway = getAssignedRunway(moved.type, runways);
           if (runway && plane.path.length > 0 && isInsideAutoLandingCapture(moved, runway)) {
             return [{ ...moved, isLanding: true, landingProgress: 0, path: [], heading: runway.heading }];
           }
@@ -324,8 +325,8 @@ export function AirTrafficCanvas({
                   <Circle cx={-14} cy={-7} r={5} fill="#d2e0e8" fillOpacity={0.32} />
                   <Circle cx={-22} cy={7} r={7} fill="#d2e0e8" fillOpacity={0.22} />
                 </G>}
-                <Polygon points="19,0 -12,-13 -5,0 -12,13" fill="#eaf5f9" stroke="#ffffff" strokeWidth={1.3} />
-                <Polygon points="16,0 -5,-9 -3,0 -5,9" fill={def.color} fillOpacity={0.9} />
+                <Polygon points="19,0 -12,-13 -5,0 -12,13" fill={def.color} stroke={def.color} strokeWidth={1.8} />
+                <Polygon points="16,0 -5,-9 -3,0 -5,9" fill="#eaf5f9" fillOpacity={0.72} />
                 <Circle cx={0} cy={-8} r={3.5} fill="#263a48" stroke="#dcecf2" strokeWidth={0.8} />
                 <Circle cx={0} cy={8} r={3.5} fill="#263a48" stroke="#dcecf2" strokeWidth={0.8} />
                 <Circle cx={7} cy={0} r={3} fill="#17385a" />
