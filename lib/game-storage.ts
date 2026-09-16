@@ -2,10 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface GameStats {
   highScore: number;
+  topScores: number[];
+  lastScore: number;
   totalLandings: number;
   bestCombo: number;
   gamesPlayed: number;
   unlockedLevels: number;
+  highestSectorCompleted: number;
   achievements: string[];
 }
 
@@ -13,10 +16,13 @@ const STATS_KEY = '@skyline_signal_stats_v1';
 
 export const DEFAULT_STATS: GameStats = {
   highScore: 0,
+  topScores: [],
+  lastScore: 0,
   totalLandings: 0,
   bestCombo: 0,
   gamesPlayed: 0,
   unlockedLevels: 1,
+  highestSectorCompleted: 0,
   achievements: [],
 };
 

@@ -42,6 +42,7 @@ export default function GameScreen() {
   const comboTimerRef = useRef<any>(null);
 
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
+  const trafficLoad = ['LOW', 'MODERATE', 'HIGH', 'EXTREME'][levelIndex] || 'EXTREME';
 
   useEffect(() => {
     loadGameStats().then(setStats);
@@ -104,10 +105,16 @@ export default function GameScreen() {
     setGameOverReason(reason);
     setShowGameOver(true);
     setStats((prev) => {
+      const topScores = [...prev.topScores, finalScore]
+        .filter((scoreValue) => scoreValue > 0)
+        .sort((left, right) => right - left)
+        .slice(0, 3);
       const updated = {
         ...prev,
         gamesPlayed: prev.gamesPlayed + 1,
         highScore: Math.max(prev.highScore, finalScore),
+        lastScore: finalScore,
+        topScores,
       };
       saveGameStats(updated);
       return updated;
@@ -118,7 +125,11 @@ export default function GameScreen() {
     setShowLevelComplete(true);
     setStats((prev) => {
       const unlocked = Math.max(prev.unlockedLevels, nextLevel + 1);
-      const updated = { ...prev, unlockedLevels: unlocked };
+      const updated = {
+        ...prev,
+        unlockedLevels: unlocked,
+        highestSectorCompleted: Math.max(prev.highestSectorCompleted, nextLevel),
+      };
       saveGameStats(updated);
       return updated;
     });
@@ -164,7 +175,7 @@ export default function GameScreen() {
         <View style={styles.titleGroup}>
           <Text style={styles.appName}>SKYLINE SIGNAL</Text>
           <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>{currentLevel.title.toUpperCase()}</Text>
+            <Text style={styles.levelText}>{currentLevel.title.toUpperCase()} · {trafficLoad} TRAFFIC</Text>
           </View>
         </View>
 
@@ -384,6 +395,29 @@ export default function GameScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.dialogCard}>
             <Text style={styles.dialogTitle}>ATC CAREER RECORD</Text>
+            <View style={styles.careerScorePanel}>
+              <View style={styles.careerMetric}>
+                <Text style={styles.careerMetricLabel}>HIGH SCORE</Text>
+                <Text style={styles.careerMetricValue}>{stats.highScore}</Text>
+              </View>
+              <View style={styles.careerMetric}>
+                <Text style={styles.careerMetricLabel}>TOTAL LANDINGS</Text>
+                <Text style={styles.careerMetricValue}>{stats.totalLandings}</Text>
+              </View>
+              <View style={styles.careerMetric}>
+                <Text style={styles.careerMetricLabel}>BEST SECTOR</Text>
+                <Text style={styles.careerMetricValue}>{stats.highestSectorCompleted || '—'}</Text>
+              </View>
+            </View>
+            <View style={styles.scoreboard}>
+              <Text style={styles.scoreboardTitle}>TOP 3 SESSIONS</Text>
+              {[0, 1, 2].map((rank) => (
+                <View style={styles.scoreboardRow} key={rank}>
+                  <Text style={styles.scoreboardRank}>#{rank + 1}</Text>
+                  <Text style={styles.scoreboardScore}>{stats.topScores[rank] ?? '—'}</Text>
+                </View>
+              ))}
+            </View>
             <View style={styles.achievementsList}>
               <View style={styles.achievementRow}>
                 <Text style={styles.achievementIcon}>
@@ -711,6 +745,65 @@ const styles = StyleSheet.create({
   bold: {
     fontWeight: '800',
     color: '#ffffff',
+  },
+  careerScorePanel: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    backgroundColor: 'rgba(0, 229, 255, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.24)',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  careerMetric: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  careerMetricLabel: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  careerMetricValue: {
+    color: '#00E5FF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  scoreboard: {
+    width: '100%',
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  scoreboardTitle: {
+    color: '#FFB300',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    marginBottom: 5,
+  },
+  scoreboardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  scoreboardRank: {
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scoreboardScore: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
   },
   achievementsList: {
     width: '100%',

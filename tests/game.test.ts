@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AIRCRAFT_DEFS, LEVELS, AircraftType } from '../constants/game-types';
+import { shouldSpawnAircraft } from '../lib/game-timing';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -31,6 +32,7 @@ describe('Game Levels Configuration', () => {
     for (let i = 1; i < LEVELS.length; i++) {
       expect(LEVELS[i].targetLandings).toBeGreaterThan(LEVELS[i - 1].targetLandings);
       expect(LEVELS[i].spawnIntervalMs).toBeLessThanOrEqual(LEVELS[i - 1].spawnIntervalMs);
+      expect(LEVELS[i].speedMultiplier).toBeGreaterThanOrEqual(LEVELS[i - 1].speedMultiplier);
     }
   });
 
@@ -41,5 +43,16 @@ describe('Game Levels Configuration', () => {
 
   it('gives the training level enough time between aircraft', () => {
     expect(LEVELS[0].spawnIntervalMs).toBeGreaterThanOrEqual(8000);
+  });
+});
+
+describe('Spawn scheduler', () => {
+  it('spawns a new aircraft when the animation clock reaches the interval', () => {
+    expect(shouldSpawnAircraft(9_000, 0, 9_000)).toBe(true);
+    expect(shouldSpawnAircraft(8_999, 0, 9_000)).toBe(false);
+  });
+
+  it('works with animation-clock values rather than wall-clock epoch values', () => {
+    expect(shouldSpawnAircraft(18_100, 9_000, 9_000)).toBe(true);
   });
 });

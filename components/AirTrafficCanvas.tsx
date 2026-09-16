@@ -10,6 +10,7 @@ import {
   GameLevel,
 } from '@/constants/game-types';
 import { sounds } from '@/lib/sound-controller';
+import { shouldSpawnAircraft } from '@/lib/game-timing';
 import * as Haptics from 'expo-haptics';
 
 interface AirTrafficCanvasProps {
@@ -41,7 +42,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const planesRef = useRef<AircraftInstance[]>([]);
   const selectedPlaneIdRef = useRef<string | null>(null);
   const activeDrawPathRef = useRef<Point[]>([]);
-  const lastSpawnTimeRef = useRef<number>(Date.now());
+  // The animation loop passes performance.now(), so the spawn marker must use that same clock.
+  const lastSpawnTimeRef = useRef<number>(performance.now());
   const scoreRef = useRef<number>(0);
   const landingsCountRef = useRef<number>(0);
   const animationFrameIdRef = useRef<number | null>(null);
@@ -155,7 +157,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       y,
       heading,
       targetHeading: heading,
-      speed: def.speed,
+      speed: def.speed * currentLevel.speedMultiplier,
       path: [],
       isLanding: false,
       landingProgress: 0,
@@ -172,6 +174,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const checkCollisionsAndWarnings = useCallback(() => {
     const planes = planesRef.current;
     let hasCritical = false;
+    let hasPredictiveAlert = false;
 
     for (let i = 0; i < planes.length; i++) {
       planes[i].warningLevel = 'safe';
@@ -188,6 +191,14 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const dx = p1.x - p2.x;
         const dy = p1.y - p2.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        // Project the existing headings ahead ~2 seconds so controllers are warned
+        // before aircraft become visually close.
+        const lookAheadSeconds = 2;
+        const projectedDx = (p1.x + Math.cos(p1.heading) * p1.speed * lookAheadSeconds)
+          - (p2.x + Math.cos(p2.heading) * p2.speed * lookAheadSeconds);
+        const projectedDy = (p1.y + Math.sin(p1.heading) * p1.speed * lookAheadSeconds)
+          - (p2.y + Math.sin(p2.heading) * p2.speed * lookAheadSeconds);
+        const projectedDistance = Math.sqrt(projectedDx * projectedDx + projectedDy * projectedDy);
 
         // Crash collision radius (~24px)
         if (dist < 26) {
@@ -200,14 +211,16 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           return;
         }
 
-        // Warning proximity radius (~60px)
+        // Immediate danger uses red; predicted convergence uses amber well in advance.
         if (dist < 65) {
           p1.warningLevel = 'critical';
           p2.warningLevel = 'critical';
           hasCritical = true;
-        } else if (dist < 95 && p1.warningLevel !== 'critical' && p2.warningLevel !== 'critical') {
+        } else if ((dist < 115 || projectedDistance < 78)
+          && p1.warningLevel !== 'critical' && p2.warningLevel !== 'critical') {
           p1.warningLevel = 'caution';
           p2.warningLevel = 'caution';
+          hasPredictiveAlert = true;
         }
       }
     }
@@ -215,6 +228,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     if (hasCritical && warningBeepCooldownRef.current <= 0) {
       sounds.playWarning();
       warningBeepCooldownRef.current = 0.6; // sound interval
+    } else if (hasPredictiveAlert && warningBeepCooldownRef.current <= 0) {
+      sounds.playWarning();
+      warningBeepCooldownRef.current = 1.4;
     }
   }, [onGameOver]);
 
@@ -230,14 +246,16 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       // Landing animation sequence
       if (p.isLanding) {
-        p.landingProgress += dt * 0.7; // landing takes ~1.4 seconds
-        p.speed = Math.max(10, p.speed * (1 - dt * 0.8));
+        // A longer decelerating rollout reads as a landing, rather than an instant disappearance.
+        p.landingProgress += dt * 0.42;
+        p.speed = Math.max(6, p.speed * (1 - dt * 1.15));
 
         // Follow runway centerline to completion
         const targetRunway = runways.find(r => r.allowedTypes.includes(p.type));
         if (targetRunway) {
-          const rx = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * p.landingProgress;
-          const ry = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * p.landingProgress;
+          const rollout = 1 - Math.pow(1 - Math.min(p.landingProgress, 1), 2);
+          const rx = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * rollout;
+          const ry = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * rollout;
           p.x = rx;
           p.y = ry;
         }
@@ -461,23 +479,37 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.setLineDash([]);
       }
 
-      // Touchdown Entry Gate (Circle & pulsing ring)
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = runway.color;
-      ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
+      // A runway threshold replaces the ambiguous circle: land along the arrow direction.
+      ctx.save();
+      ctx.translate(runway.startX, runway.startY);
+      ctx.rotate(runway.heading);
+      ctx.fillStyle = '#f8fbff';
+      ctx.fillRect(-10, -18, 20, 9);
+      ctx.fillRect(-10, 9, 20, 9);
+      ctx.fillStyle = runway.color;
       ctx.beginPath();
-      ctx.arc(runway.startX, runway.startY, runway.touchdownRadius, 0, Math.PI * 2);
+      ctx.moveTo(28, 0);
+      ctx.lineTo(10, -10);
+      ctx.lineTo(10, 10);
+      ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = runway.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(-runway.touchdownRadius, 0);
+      ctx.lineTo(42, 0);
       ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
 
-      // Approach glidecone indicator
-      const coneLength = 55;
-      const appAngle = runway.heading + Math.PI; // pointing back into the sky
-      const halfAngle = 0.35;
-      ctx.fillStyle = `${runway.color}22`;
+      // Large translucent approach corridor points away from the threshold.
+      const coneLength = 80;
+      const appAngle = runway.heading + Math.PI;
+      ctx.fillStyle = `${runway.color}1E`;
       ctx.beginPath();
       ctx.moveTo(runway.startX, runway.startY);
-      ctx.arc(runway.startX, runway.startY, coneLength, appAngle - halfAngle, appAngle + halfAngle);
+      ctx.arc(runway.startX, runway.startY, coneLength, appAngle - 0.28, appAngle + 0.28);
       ctx.closePath();
       ctx.fill();
 
@@ -490,13 +522,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const labelWidth = ctx.measureText(runwayLabel).width + 14;
       ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
-      ctx.fillRect(runway.startX - labelWidth / 2, runway.startY - runway.touchdownRadius - 24, labelWidth, 17);
+      ctx.fillRect(runway.startX - labelWidth / 2, runway.startY - 42, labelWidth, 17);
       ctx.strokeStyle = runway.color;
       ctx.lineWidth = 1;
-      ctx.strokeRect(runway.startX - labelWidth / 2, runway.startY - runway.touchdownRadius - 24, labelWidth, 17);
+      ctx.strokeRect(runway.startX - labelWidth / 2, runway.startY - 42, labelWidth, 17);
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(runwayLabel, runway.startX, runway.startY - runway.touchdownRadius - 12);
+      ctx.fillText(runwayLabel, runway.startX, runway.startY - 30);
       ctx.restore();
     });
 
@@ -523,6 +555,41 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
     });
 
+    // Predictive traffic alert: a controller sees the conflict before the aircraft overlap.
+    const alertAircraft = planesRef.current.filter((plane) => plane.warningLevel !== 'safe');
+    if (alertAircraft.length > 0) {
+      const isCritical = alertAircraft.some((plane) => plane.warningLevel === 'critical');
+      const alertColor = isCritical ? '#FF3D71' : '#FFB300';
+      ctx.save();
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
+      ctx.fillRect(w / 2 - 112, 12, 224, 24);
+      ctx.strokeStyle = alertColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(w / 2 - 112, 12, 224, 24);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 11px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(isCritical ? '⚠ IMMEDIATE SEPARATION' : '⚠ TRAFFIC WILL CONVERGE', w / 2, 28);
+      ctx.restore();
+
+      alertAircraft.forEach((plane) => {
+        const vectorLength = plane.warningLevel === 'critical' ? 38 : 54;
+        ctx.save();
+        ctx.strokeStyle = alertColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(plane.x, plane.y);
+        ctx.lineTo(
+          plane.x + Math.cos(plane.heading) * vectorLength,
+          plane.y + Math.sin(plane.heading) * vectorLength,
+        );
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      });
+    }
+
     // Active touch drawing path
     if (activeDrawPathRef.current.length > 1) {
       ctx.save();
@@ -540,6 +607,28 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     planesRef.current.forEach(p => {
       const def = AIRCRAFT_DEFS[p.type];
       const scale = p.isLanding ? Math.max(0.4, 1 - p.landingProgress * 0.5) : 1;
+
+      // Fine vapour trail is visible only during flight; it disappears during runway rollout.
+      if (!p.isLanding) {
+        const trailLength = p.type === 'supersonic' ? 34 : 22;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineWidth = p.type === 'supersonic' ? 3 : 2;
+        const trail = ctx.createLinearGradient(
+          p.x - Math.cos(p.heading) * 4,
+          p.y - Math.sin(p.heading) * 4,
+          p.x - Math.cos(p.heading) * trailLength,
+          p.y - Math.sin(p.heading) * trailLength,
+        );
+        trail.addColorStop(0, `${def.color}B0`);
+        trail.addColorStop(1, `${def.color}00`);
+        ctx.strokeStyle = trail;
+        ctx.beginPath();
+        ctx.moveTo(p.x - Math.cos(p.heading) * 4, p.y - Math.sin(p.heading) * 4);
+        ctx.lineTo(p.x - Math.cos(p.heading) * trailLength, p.y - Math.sin(p.heading) * trailLength);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.translate(p.x, p.y);
@@ -562,16 +651,32 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.stroke();
       }
 
-      // Shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      // Soft ground shadow gives the silhouette altitude and direction.
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
       ctx.beginPath();
-      ctx.ellipse(3, 4, def.length * 0.45, def.wingspan * 0.35, 0, 0, Math.PI * 2);
+      ctx.ellipse(4, 6, def.length * 0.42, def.wingspan * 0.30, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Plane Body
-      ctx.fillStyle = def.color;
+      // Brief tyre smoke at touchdown: it dissipates as the aircraft rolls out.
+      if (p.isLanding && p.landingProgress < 0.52) {
+        const smokeAlpha = (0.52 - p.landingProgress) * 0.45;
+        for (let smoke = 0; smoke < 3; smoke += 1) {
+          ctx.fillStyle = `rgba(210, 224, 232, ${Math.max(0, smokeAlpha - smoke * 0.05)})`;
+          ctx.beginPath();
+          ctx.ellipse(-12 - smoke * 7, (smoke % 2 ? 8 : -8), 8 + smoke * 3, 3 + smoke, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Metallic fuselage surface with a bright upper highlight.
+      const fuselage = ctx.createLinearGradient(-def.length * 0.52, -7, def.length * 0.56, 8);
+      fuselage.addColorStop(0, '#6c8496');
+      fuselage.addColorStop(0.35, '#f3f8fb');
+      fuselage.addColorStop(0.62, def.color);
+      fuselage.addColorStop(1, '#15364c');
+      ctx.fillStyle = fuselage;
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.3;
 
       if (p.type === 'supersonic') {
         // Delta wing supersonic jet
@@ -627,11 +732,65 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.fill();
       }
 
-      // Cockpit Window
-      ctx.fillStyle = '#1a2233';
+      // Twin engine nacelles give jets a true aircraft silhouette.
+      if (p.type === 'jet' || p.type === 'supersonic') {
+        [-1, 1].forEach((side) => {
+          ctx.fillStyle = '#243442';
+          ctx.beginPath();
+          ctx.ellipse(-2, side * def.wingspan * 0.28, 6, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#dcecf2';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = '#061019';
+          ctx.beginPath();
+          ctx.arc(2, side * def.wingspan * 0.28, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // Cockpit glass plus windows.
+      ctx.fillStyle = '#142d48';
       ctx.beginPath();
-      ctx.arc(def.length * 0.28, 0, 2.8, 0, Math.PI * 2);
+      ctx.ellipse(def.length * 0.28, 0, 4.2, 3, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.62)';
+      for (let window = 0; window < 3; window += 1) {
+        ctx.beginPath();
+        ctx.arc(-2 - window * 5, 0, 0.9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Flashing red/green wingtip lights make active aircraft easy to track.
+      const navPulse = 0.65 + Math.sin(Date.now() * 0.012 + p.createdAt) * 0.35;
+      ctx.shadowBlur = 7;
+      ctx.shadowColor = '#ff3d71';
+      ctx.fillStyle = `rgba(255, 61, 113, ${navPulse})`;
+      ctx.beginPath();
+      ctx.arc(-2, -def.wingspan * 0.48, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = '#00e676';
+      ctx.fillStyle = `rgba(0, 230, 118, ${navPulse})`;
+      ctx.beginPath();
+      ctx.arc(-2, def.wingspan * 0.48, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Gear deploys for rollout and rolls along the centreline.
+      if (p.isLanding) {
+        ctx.strokeStyle = '#1d2830';
+        ctx.lineWidth = 2;
+        [-7, 5].forEach((wheelX) => {
+          ctx.beginPath();
+          ctx.moveTo(wheelX, -3);
+          ctx.lineTo(wheelX - 2, 7);
+          ctx.stroke();
+          ctx.fillStyle = '#05070a';
+          ctx.beginPath();
+          ctx.arc(wheelX - 2, 8, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
 
       // Selected ring
       if (selectedPlaneIdRef.current === p.id) {
@@ -681,7 +840,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       if (!isPaused && !isGameOverRef.current) {
         // Spawn schedule
-        if (now - lastSpawnTimeRef.current > currentLevel.spawnIntervalMs) {
+        if (shouldSpawnAircraft(now, lastSpawnTimeRef.current, currentLevel.spawnIntervalMs)) {
           spawnAircraft();
           lastSpawnTimeRef.current = now;
         }
@@ -786,6 +945,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     isGameOverRef.current = false;
     landingsCountRef.current = 0;
     scoreRef.current = 0;
+    lastSpawnTimeRef.current = performance.now();
     setTimeout(() => {
       spawnAircraft();
     }, 400);

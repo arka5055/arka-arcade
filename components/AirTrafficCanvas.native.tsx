@@ -96,7 +96,7 @@ export function AirTrafficCanvas({
 
     const plane: AircraftInstance = {
       id: `native-plane-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
-      type, x, y, heading, targetHeading: heading, speed: AIRCRAFT_DEFS[type].speed,
+      type, x, y, heading, targetHeading: heading, speed: AIRCRAFT_DEFS[type].speed * currentLevel.speedMultiplier,
       path: [], isLanding: false, landingProgress: 0, warningLevel: 'safe', landed: false, createdAt: Date.now(),
     };
     setPlanes((previous) => [...previous, plane]);
@@ -127,6 +127,29 @@ export function AirTrafficCanvas({
 
       setPlanes((previous) => {
         const next = previous.flatMap((plane) => {
+          const assignedRunway = runways.find((item) => item.allowedTypes.includes(plane.type));
+          if (plane.isLanding && assignedRunway) {
+            const landingProgress = Math.min(1, plane.landingProgress + 0.06);
+            const rollout = 1 - Math.pow(1 - landingProgress, 2);
+            if (landingProgress >= 1) {
+              landingsRef.current += 1;
+              scoreRef.current += AIRCRAFT_DEFS[plane.type].scoreValue;
+              setTimeout(() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                onPlaneLanded(plane.type, AIRCRAFT_DEFS[plane.type].scoreValue, landingsRef.current);
+                if (landingsRef.current >= currentLevel.targetLandings) onLevelComplete(levelIndex + 1);
+              }, 0);
+              return [];
+            }
+            return [{
+              ...plane,
+              heading: assignedRunway.heading,
+              landingProgress,
+              x: assignedRunway.startX + (assignedRunway.endX - assignedRunway.startX) * rollout,
+              y: assignedRunway.startY + (assignedRunway.endY - assignedRunway.startY) * rollout,
+            }];
+          }
+
           const target = plane.path[0];
           let targetHeading = plane.targetHeading;
           if (target) targetHeading = Math.atan2(target.y - plane.y, target.x - plane.x);
@@ -151,14 +174,7 @@ export function AirTrafficCanvas({
 
           const runway = runways.find((item) => item.allowedTypes.includes(moved.type));
           if (runway && moved.path.length > 0 && Math.hypot(moved.x - runway.startX, moved.y - runway.startY) < runway.touchdownRadius) {
-            landingsRef.current += 1;
-            scoreRef.current += AIRCRAFT_DEFS[moved.type].scoreValue;
-            setTimeout(() => {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              onPlaneLanded(moved.type, AIRCRAFT_DEFS[moved.type].scoreValue, landingsRef.current);
-              if (landingsRef.current >= currentLevel.targetLandings) onLevelComplete(levelIndex + 1);
-            }, 0);
-            return [];
+            return [{ ...moved, isLanding: true, landingProgress: 0, path: [], heading: runway.heading }];
           }
           return [moved];
         });
@@ -252,9 +268,14 @@ export function AirTrafficCanvas({
             <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke={runway.type === 'water' ? '#006455' : '#121923'} strokeWidth={28} strokeLinecap="round" />
             <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke={runway.color} strokeWidth={3} strokeDasharray="8 7" strokeLinecap="round" />
             {runway.type === 'runway' && <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke="#ffffff" strokeOpacity={0.9} strokeWidth={2} strokeDasharray="6 6" />}
-            <Circle cx={runway.startX} cy={runway.startY} r={runway.touchdownRadius} fill="#030c14" fillOpacity={0.88} stroke={runway.color} strokeWidth={3} />
-            <Rect x={runway.startX - 48} y={runway.startY - runway.touchdownRadius - 24} width={96} height={17} fill="#030c14" stroke={runway.color} rx={2} />
-            <SvgText x={runway.startX} y={runway.startY - runway.touchdownRadius - 12} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{runway.name}</SvgText>
+            <G transform={`translate(${runway.startX} ${runway.startY}) rotate(${runway.heading * 180 / Math.PI})`}>
+              <Rect x={-10} y={-18} width={20} height={9} fill="#f8fbff" />
+              <Rect x={-10} y={9} width={20} height={9} fill="#f8fbff" />
+              <Polygon points="28,0 10,-10 10,10" fill={runway.color} />
+              <Line x1={-runway.touchdownRadius} y1={0} x2={42} y2={0} stroke={runway.color} strokeWidth={2} strokeDasharray="5 5" />
+            </G>
+            <Rect x={runway.startX - 48} y={runway.startY - 42} width={96} height={17} fill="#030c14" stroke={runway.color} rx={2} />
+            <SvgText x={runway.startX} y={runway.startY - 30} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{runway.name}</SvgText>
           </G>
         ))}
 
@@ -264,11 +285,36 @@ export function AirTrafficCanvas({
           const tag = routeName(plane.type);
           return (
             <G key={plane.id}>
+              {!plane.isLanding && <Line
+                x1={plane.x - Math.cos(plane.heading) * 4}
+                y1={plane.y - Math.sin(plane.heading) * 4}
+                x2={plane.x - Math.cos(plane.heading) * (plane.type === 'supersonic' ? 34 : 22)}
+                y2={plane.y - Math.sin(plane.heading) * (plane.type === 'supersonic' ? 34 : 22)}
+                stroke={def.color}
+                strokeOpacity={0.42}
+                strokeWidth={plane.type === 'supersonic' ? 3 : 2}
+                strokeLinecap="round"
+              />}
               {target && <Line x1={plane.x} y1={plane.y} x2={target.x} y2={target.y} stroke={def.color} strokeWidth={2.5} strokeDasharray="5 5" />}
               {selectedId === plane.id && <Circle cx={plane.x} cy={plane.y} r={28} fill="none" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" />}
               <G transform={`translate(${plane.x} ${plane.y}) rotate(${plane.heading * 180 / Math.PI})`}>
-                <Polygon points="18,0 -11,-12 -5,0 -11,12" fill={def.color} stroke="#ffffff" strokeWidth={1.3} />
-                <Circle cx={6} cy={0} r={2.2} fill="#10213a" />
+                {plane.isLanding && <G opacity={Math.max(0, 0.55 - plane.landingProgress)}>
+                  <Circle cx={-14} cy={-7} r={5} fill="#d2e0e8" fillOpacity={0.32} />
+                  <Circle cx={-22} cy={7} r={7} fill="#d2e0e8" fillOpacity={0.22} />
+                </G>}
+                <Polygon points="19,0 -12,-13 -5,0 -12,13" fill="#eaf5f9" stroke="#ffffff" strokeWidth={1.3} />
+                <Polygon points="16,0 -5,-9 -3,0 -5,9" fill={def.color} fillOpacity={0.9} />
+                <Circle cx={0} cy={-8} r={3.5} fill="#263a48" stroke="#dcecf2" strokeWidth={0.8} />
+                <Circle cx={0} cy={8} r={3.5} fill="#263a48" stroke="#dcecf2" strokeWidth={0.8} />
+                <Circle cx={7} cy={0} r={3} fill="#17385a" />
+                <Circle cx={-3} cy={-12} r={2} fill="#ff3d71" />
+                <Circle cx={-3} cy={12} r={2} fill="#00e676" />
+                {plane.isLanding && <G>
+                  <Line x1={-6} y1={-2} x2={-8} y2={8} stroke="#1d2830" strokeWidth={2} />
+                  <Line x1={6} y1={-2} x2={4} y2={8} stroke="#1d2830" strokeWidth={2} />
+                  <Circle cx={-8} cy={9} r={2.2} fill="#05070a" />
+                  <Circle cx={4} cy={9} r={2.2} fill="#05070a" />
+                </G>}
               </G>
               <Rect x={plane.x - 33} y={plane.y - 35} width={66} height={16} fill="#030c14" fillOpacity={0.92} stroke={def.color} rx={2} />
               <SvgText x={plane.x} y={plane.y - 24} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{tag}</SvgText>

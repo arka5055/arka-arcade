@@ -101,6 +101,7 @@ export interface GameLevel {
   title: string;
   targetLandings: number;
   spawnIntervalMs: number;
+  speedMultiplier: number;
   allowedTypes: AircraftType[];
   windDirection: number; // radians
   windSpeed: number; // 0 to 10
@@ -112,6 +113,7 @@ export const LEVELS: GameLevel[] = [
     title: 'Training Approach',
     targetLandings: 6,
     spawnIntervalMs: 9000,
+    speedMultiplier: 0.85,
     allowedTypes: ['jet', 'propeller'],
     windDirection: 0,
     windSpeed: 0,
@@ -121,6 +123,7 @@ export const LEVELS: GameLevel[] = [
     title: 'Coastal Crosswind',
     targetLandings: 12,
     spawnIntervalMs: 7600,
+    speedMultiplier: 1.0,
     allowedTypes: ['jet', 'propeller', 'seaplane'],
     windDirection: Math.PI / 4,
     windSpeed: 2,
@@ -130,6 +133,7 @@ export const LEVELS: GameLevel[] = [
     title: 'Peak Rush Hour',
     targetLandings: 20,
     spawnIntervalMs: 6200,
+    speedMultiplier: 1.15,
     allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
     windDirection: Math.PI / 2,
     windSpeed: 4,
@@ -139,6 +143,7 @@ export const LEVELS: GameLevel[] = [
     title: 'Superstorm Radar',
     targetLandings: 30,
     spawnIntervalMs: 5000,
+    speedMultiplier: 1.3,
     allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
     windDirection: -Math.PI / 3,
     windSpeed: 6,
