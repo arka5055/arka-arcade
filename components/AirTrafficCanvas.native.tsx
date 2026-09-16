@@ -24,11 +24,12 @@ import {
 } from '@/constants/game-types';
 import {
   distanceToLineSegment,
-  isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
 import { getAssignedRunway } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
+import { validateLandingRoute } from '@/lib/landing-route-validation';
+import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -193,7 +194,17 @@ export function AirTrafficCanvas({
           };
 
           const runway = getAssignedRunway(moved.type, runways);
-          if (runway && plane.path.length > 0 && isInsideAutoLandingCapture(moved, runway)) {
+          let headingDifference = Math.abs(heading - (runway?.heading ?? 0));
+          while (headingDifference > Math.PI) headingDifference = Math.abs(headingDifference - Math.PI * 2);
+          const authorized = Boolean(runway && canCommitLanding({
+            landingCleared: moved.landingCleared,
+            routeComplete: moved.path.length === 0,
+            insideCapture: isInsidePhysicalTouchdown(moved, runway),
+            headingDifference,
+            headingTolerance: runway.headingTolerance,
+            isHelipad: runway.type === 'helipad',
+          }));
+          if (runway && authorized) {
             return [{
               ...moved,
               isLanding: true,
@@ -260,9 +271,12 @@ export function AirTrafficCanvas({
         const drawnPoint = pointFromEvent(event);
         setPlanes((previous) => previous.map((plane) => {
           if (plane.id !== id) return plane;
+          const runway = getAssignedRunway(plane.type, runways);
+          const route = [drawnPoint];
           return {
             ...plane,
-            path: [drawnPoint],
+            path: route,
+            landingCleared: Boolean(runway && validateLandingRoute(plane, route, runway).isLocked),
           };
         }));
       }

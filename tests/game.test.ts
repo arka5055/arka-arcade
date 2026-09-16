@@ -19,6 +19,7 @@ import { createCrashEffect, getCrashProgress } from '../lib/crash-effects';
 import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
 import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering } from '../lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from '../lib/landing-sequence';
+import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -188,6 +189,48 @@ describe('Staged landing sequence', () => {
     expect(getLandingStageAtElapsed('helicopter', 0.4).stage).toBe('hoverApproach');
     expect(getLandingStageAtElapsed('helicopter', 2.4).stage).toBe('hoverDescent');
     expect(getLandingStageAtElapsed('helicopter', 3.5).stage).toBe('helipadSettle');
+  });
+
+  it('never starts a landing just because an aircraft flies near its runway', () => {
+    expect(canCommitLanding({
+      landingCleared: false,
+      routeComplete: true,
+      insideCapture: true,
+      headingDifference: 0,
+      headingTolerance: 0.8,
+      isHelipad: false,
+    })).toBe(false);
+  });
+
+  it('requires a completed green-cleared player route before touchdown', () => {
+    expect(canCommitLanding({
+      landingCleared: true,
+      routeComplete: true,
+      insideCapture: true,
+      headingDifference: 0.2,
+      headingTolerance: 0.8,
+      isHelipad: false,
+    })).toBe(true);
+    expect(canCommitLanding({
+      landingCleared: true,
+      routeComplete: false,
+      insideCapture: true,
+      headingDifference: 0.2,
+      headingTolerance: 0.8,
+      isHelipad: false,
+    })).toBe(false);
+  });
+
+  it('uses a close physical threshold after the player has received route clearance', () => {
+    const testRunway: RunwayZone = {
+      id: 'threshold-test', name: 'T1', startX: 200, startY: 200, endX: 200, endY: 500,
+      allowedTypes: ['jet'], heading: Math.PI / 2, headingTolerance: 0.8,
+      touchdownRadius: 36, color: '#00E5FF', type: 'runway',
+    };
+    const physicalRadius = getPhysicalTouchdownRadius(testRunway);
+    expect(physicalRadius).toBeLessThan(validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 196 }], testRunway).captureRadius);
+    expect(isInsidePhysicalTouchdown({ x: 200, y: 200 + physicalRadius - 1 }, testRunway)).toBe(true);
+    expect(isInsidePhysicalTouchdown({ x: 200, y: 200 + physicalRadius + 1 }, testRunway)).toBe(false);
   });
 });
 

@@ -14,7 +14,6 @@ import { shouldSpawnAircraft } from '@/lib/game-timing';
 import {
   distanceToLineSegment,
   getApproachEntry,
-  isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
 import { preservePlayerDrawnRoute } from '@/lib/player-routing';
 import { validateLandingRoute } from '@/lib/landing-route-validation';
@@ -28,6 +27,7 @@ import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/cra
 import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
+import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -378,13 +378,22 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       p.x += Math.cos(p.heading) * p.speed * dt;
       p.y += Math.sin(p.heading) * p.speed * dt;
 
-      // A flight can only capture the one runway assigned to its aircraft type.
+      // A flight can only land after the player completes a route that reached the green
+      // clearance state. Merely flying through a runway capture circle never authorizes landing.
       const assignedRunway = getAssignedRunway(p.type, runways);
-      if (assignedRunway && isInsideAutoLandingCapture(p, assignedRunway)) {
+      if (assignedRunway) {
         let angleDiff = Math.abs(p.heading - assignedRunway.heading);
         while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
 
-        if (angleDiff <= assignedRunway.headingTolerance) {
+        const authorized = canCommitLanding({
+          landingCleared: p.landingCleared,
+          routeComplete: p.path.length === 0,
+          insideCapture: isInsidePhysicalTouchdown(p, assignedRunway),
+          headingDifference: angleDiff,
+          headingTolerance: assignedRunway.headingTolerance,
+          isHelipad: assignedRunway.type === 'helipad',
+        });
+        if (authorized) {
           p.isLanding = true;
           p.path = [];
           p.heading = assignedRunway.heading;
@@ -851,9 +860,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     planesRef.current.forEach(p => {
       const def = AIRCRAFT_DEFS[p.type];
       const landing = p.isLanding ? getLandingSequence(p.type, p.landingProgress) : null;
+      const approachAltitude = landing?.altitude ?? 0;
       // Aircraft no longer shrinks away during landing. A subtle descent-scale cue only
       // applies while it is still above the runway, then returns to full ground scale.
-      const scale = landing ? 0.95 + (1 - landing.altitude / 12) * 0.05 : 1;
+      const scale = landing ? 0.95 + (1 - approachAltitude / 12) * 0.05 : 1;
 
       // Fine vapour trail is visible only during flight; it disappears during runway rollout.
       if (!p.isLanding && p.type !== 'helicopter') {
@@ -877,8 +887,78 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.restore();
       }
 
+      // Ground-contact detail anchors the rollout to the actual assigned surface.
+      // Asphalt receives growing rubber marks; water receives a fading V-shaped wake.
+      const landingRunway = landing ? getAssignedRunway(p.type, runwaysRef.current) : undefined;
+      if (landing && landingRunway && landing.runwayProgress > 0.06) {
+        const runwayVectorX = landingRunway.endX - landingRunway.startX;
+        const runwayVectorY = landingRunway.endY - landingRunway.startY;
+        const runwayLength = Math.hypot(runwayVectorX, runwayVectorY) || 1;
+        const unitX = runwayVectorX / runwayLength;
+        const unitY = runwayVectorY / runwayLength;
+        const normalX = -unitY;
+        const normalY = unitX;
+        const markStart = Math.max(0.04, landing.runwayProgress - 0.24);
+        const startX = landingRunway.startX + runwayVectorX * markStart;
+        const startY = landingRunway.startY + runwayVectorY * markStart;
+        ctx.save();
+        if (p.type === 'seaplane') {
+          const wakeAlpha = Math.min(0.55, 0.12 + landing.runwayProgress * 0.48);
+          ctx.strokeStyle = `rgba(224, 255, 255, ${wakeAlpha})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(startX - normalX * 5, startY - normalY * 5);
+          ctx.lineTo(p.x - normalX * 12 - unitX * 14, p.y - normalY * 12 - unitY * 14);
+          ctx.moveTo(startX + normalX * 5, startY + normalY * 5);
+          ctx.lineTo(p.x + normalX * 12 - unitX * 14, p.y + normalY * 12 - unitY * 14);
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = `rgba(5, 8, 12, ${Math.min(0.5, 0.14 + landing.runwayProgress * 0.42)})`;
+          ctx.lineWidth = 1.35;
+          [-1, 1].forEach((side) => {
+            ctx.beginPath();
+            ctx.moveTo(startX + normalX * side * def.wingspan * 0.16, startY + normalY * side * def.wingspan * 0.16);
+            ctx.lineTo(p.x + normalX * side * def.wingspan * 0.16, p.y + normalY * side * def.wingspan * 0.16);
+            ctx.stroke();
+          });
+        }
+        ctx.restore();
+      }
+
+      // Two soft landing lamps lead the eye into the flare without obscuring player-drawn routes.
+      if (landing && (landing.stage === 'finalApproach' || landing.stage === 'flare') && p.type !== 'helicopter') {
+        const beamLength = 22 + landing.altitude * 1.4;
+        ctx.save();
+        ctx.translate(p.x, p.y - approachAltitude * 0.3);
+        ctx.rotate(p.heading);
+        ctx.globalCompositeOperation = 'screen';
+        const beam = ctx.createLinearGradient(def.length * 0.32, 0, def.length * 0.32 + beamLength, 0);
+        beam.addColorStop(0, 'rgba(255, 250, 213, 0.32)');
+        beam.addColorStop(1, 'rgba(255, 250, 213, 0)');
+        ctx.fillStyle = beam;
+        ctx.beginPath();
+        ctx.moveTo(def.length * 0.28, -3);
+        ctx.lineTo(def.length * 0.28 + beamLength, -8);
+        ctx.lineTo(def.length * 0.28 + beamLength, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // The runway shadow is drawn in its own transform so the aircraft visibly descends
+      // into it. That avoids the flat "slide then vanish" appearance.
+      const shadowAlpha = 0.20 + (1 - Math.min(1, approachAltitude / 12)) * 0.16;
       ctx.save();
-      ctx.translate(p.x, p.y);
+      ctx.translate(p.x - approachAltitude * 0.18, p.y + 5 + approachAltitude * 0.55);
+      ctx.rotate(p.heading);
+      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, def.length * 0.42, def.wingspan * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(p.x, p.y - approachAltitude * 0.3);
       ctx.rotate(p.heading);
       ctx.scale(scale, scale);
 
@@ -898,16 +978,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.stroke();
       }
 
-      // The shadow closes toward the wheels as the aircraft descends through flare.
-      const altitude = landing?.altitude ?? 0;
-      const shadowAlpha = 0.20 + (1 - Math.min(1, altitude / 12)) * 0.16;
-      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
-      ctx.beginPath();
-      ctx.ellipse(-altitude * 0.4, 6 + altitude * 0.55, def.length * 0.42, def.wingspan * 0.30, 0, 0, Math.PI * 2);
-      ctx.fill();
-
       // Tyre smoke only appears right after contact, not throughout the runway sequence.
-      if (landing?.tyreSmoke) {
+      if (landing?.tyreSmoke && p.type !== 'seaplane') {
         const smokeAlpha = 0.28 + Math.sin(Date.now() * 0.025) * 0.08;
         for (let smoke = 0; smoke < 3; smoke += 1) {
           ctx.fillStyle = `rgba(210, 224, 232, ${Math.max(0, smokeAlpha - smoke * 0.05)})`;
