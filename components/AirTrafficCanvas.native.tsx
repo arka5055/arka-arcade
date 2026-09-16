@@ -23,7 +23,6 @@ import {
   RunwayZone,
 } from '@/constants/game-types';
 import {
-  buildAssistedRoute,
   distanceToLineSegment,
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
@@ -236,11 +235,9 @@ export function AirTrafficCanvas({
         const drawnPoint = pointFromEvent(event);
         setPlanes((previous) => previous.map((plane) => {
           if (plane.id !== id) return plane;
-          const runway = runways.find((item) => item.allowedTypes.includes(plane.type));
-          if (!runway) return plane;
           return {
             ...plane,
-            path: buildAssistedRoute(plane, drawnPoint, runway),
+            path: [drawnPoint],
           };
         }));
       }

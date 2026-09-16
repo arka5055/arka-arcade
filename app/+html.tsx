@@ -16,9 +16,27 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/skyline-180.png" />
+        <link rel="preload" href="/scenery/airport.jpg" as="image" type="image/jpeg" fetchPriority="high" />
+        <style>{`
+          #skyline-launch-screen { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #030c14; color: #d9f8ff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+          #skyline-launch-card { display: grid; justify-items: center; gap: 16px; letter-spacing: 0.12em; font-size: 11px; font-weight: 800; }
+          #skyline-launch-icon { width: 82px; height: 82px; border-radius: 20px; box-shadow: 0 0 28px rgba(0, 229, 255, 0.30); }
+          #skyline-launch-line { width: 92px; height: 2px; overflow: hidden; background: rgba(0, 229, 255, 0.20); }
+          #skyline-launch-line::after { content: ""; display: block; width: 38%; height: 100%; background: #00e5ff; animation: skyline-load 0.9s ease-in-out infinite alternate; }
+          @keyframes skyline-load { from { transform: translateX(0); } to { transform: translateX(165%); } }
+        `}</style>
         <ScrollViewStyleReset />
       </head>
-      <body>{children}</body>
+      <body>
+        <div id="skyline-launch-screen" aria-label="Loading Skyline Signal">
+          <div id="skyline-launch-card">
+            <img id="skyline-launch-icon" src="/icons/skyline-180.png" alt="" />
+            <span>INITIALIZING RADAR</span>
+            <div id="skyline-launch-line" />
+          </div>
+        </div>
+        {children}
+      </body>
     </html>
   );
 }

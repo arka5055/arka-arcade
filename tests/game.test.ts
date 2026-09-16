@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { AIRCRAFT_DEFS, LEVELS, AircraftType } from '../constants/game-types';
 import { shouldSpawnAircraft } from '../lib/game-timing';
 import {
-  buildAssistedRoute,
   distanceToLineSegment,
   getApproachEntry,
   isInsideAutoLandingCapture,
 } from '../lib/approach-routing';
+import { preservePlayerDrawnRoute } from '../lib/player-routing';
 import { getDriftingCloudShadows } from '../lib/scenery-effects';
 
 describe('Aircraft Definitions', () => {
@@ -91,11 +91,20 @@ describe('Assisted runway approach', () => {
     expect(isInsideAutoLandingCapture({ x: 200, y: 300 }, runway)).toBe(false);
   });
 
-  it('keeps a newly drawn steering point before the safe final approach', () => {
-    const route = buildAssistedRoute({ x: 50, y: 50 }, { x: 100, y: 150 }, runway);
-    expect(route).toHaveLength(3);
-    expect(route[0]).toEqual({ x: 100, y: 150 });
-    expect(route[2]).toEqual({ x: runway.startX, y: runway.startY });
+  it('keeps every player-drawn steering point without adding automatic approach points', () => {
+    const drawing = [{ x: 50, y: 50 }, { x: 100, y: 150 }, { x: 160, y: 125 }, { x: 200, y: 200 }];
+    const route = preservePlayerDrawnRoute(drawing);
+    expect(route).toEqual(drawing.slice(1));
+    expect(route).not.toContainEqual({ x: 200, y: 80 });
+    expect(preservePlayerDrawnRoute([{ x: 50, y: 50 }])).toEqual([]);
+  });
+
+  it('does not mutate the stored player drawing while creating a flight route', () => {
+    const drawing = [{ x: 10, y: 10 }, { x: 40, y: 80 }, { x: 120, y: 140 }];
+    const original = JSON.parse(JSON.stringify(drawing));
+    const route = preservePlayerDrawnRoute(drawing);
+    route[0].x = 999;
+    expect(drawing).toEqual(original);
   });
 
   it('recognizes a touch near an active route line for redrawing', () => {

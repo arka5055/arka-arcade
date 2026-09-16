@@ -12,15 +12,17 @@ import {
 import { sounds } from '@/lib/sound-controller';
 import { shouldSpawnAircraft } from '@/lib/game-timing';
 import {
-  buildAssistedRoute,
   distanceToLineSegment,
   getApproachEntry,
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
+import { preservePlayerDrawnRoute } from '@/lib/player-routing';
 import { getDriftingCloudShadows } from '@/lib/scenery-effects';
 import * as Haptics from 'expo-haptics';
 
-const coastalAirportScene = require('../assets/images/coastal-airport-scene.jpg');
+// Served independently and preloaded by app/+html.tsx, so flight controls start
+// before the scenic image has finished decoding on a mobile connection.
+const coastalAirportScene = '/scenery/airport.jpg';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -69,9 +71,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
   useEffect(() => {
     const image = new Image();
-    image.src = typeof coastalAirportScene === 'string'
-      ? coastalAirportScene
-      : coastalAirportScene?.uri;
+    image.src = coastalAirportScene;
     image.onload = () => {
       sceneryImageRef.current = image;
     };
@@ -606,7 +606,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.fill();
         ctx.fillStyle = '#ffffff';
         ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        ctx.fillText('AUTO APPROACH', approachEntry.x, approachEntry.y - 10);
+        ctx.fillText('LANDING CORRIDOR', approachEntry.x, approachEntry.y - 10);
       }
       ctx.restore();
     });
@@ -1019,12 +1019,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     if (selectedPlaneIdRef.current) {
       const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
       if (plane) {
-        const matchingRunway = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
-        if (matchingRunway) {
-          // The player grants the clearance; the game supplies a generous final approach.
-          // This removes the brittle need to draw a pixel-perfect path to a tiny target.
-          const drawnPoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
-          plane.path = buildAssistedRoute(plane, drawnPoint, matchingRunway);
+        const playerRoute = preservePlayerDrawnRoute(activeDrawPathRef.current);
+        if (playerRoute.length > 0) {
+          // Player intent wins: retain each point drawn with the finger, without replacing it
+          // with an automatic runway approach. Landing capture still validates the final angle.
+          plane.path = playerRoute;
           sounds.playSelect();
         }
       }
@@ -1052,9 +1051,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     landingsCountRef.current = 0;
     scoreRef.current = 0;
     lastSpawnTimeRef.current = performance.now();
-    setTimeout(() => {
+    const firstFlight = setTimeout(() => {
       spawnAircraft();
-    }, 400);
+    }, 180);
+    return () => clearTimeout(firstFlight);
   }, [levelIndex, spawnAircraft]);
 
   return (

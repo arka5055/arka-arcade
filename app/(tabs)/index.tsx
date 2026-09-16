@@ -366,7 +366,7 @@ export default function GameScreen() {
             <Text style={styles.dialogTitle}>CONTROLLER BRIEFING</Text>
             <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
               <Text style={styles.infoParagraph}>
-                👉 <Text style={styles.bold}>Drag to Clear or Change:</Text> Touch any aircraft—or its dashed route line—and drag to a new point. The correct runway glows, then the game creates a smooth automatic final approach when you release.
+                👉 <Text style={styles.bold}>Draw the Exact Flight Path:</Text> Touch any aircraft—or its dashed route line—and draw the route you want. Every point you draw is kept. Guide it through the matching landing corridor to land.
               </Text>
               <Text style={styles.infoParagraph}>
                 🛬 <Text style={styles.bold}>Match Corridors:</Text>

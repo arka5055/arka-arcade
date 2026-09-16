@@ -8,5 +8,17 @@ export function PwaLifecycle() {
       // Offline caching is an enhancement; gameplay remains available over the network.
     });
   }, []);
+
+  useEffect(() => {
+    const launchScreen = document.getElementById('skyline-launch-screen');
+    if (!launchScreen) return;
+    const fade = window.setTimeout(() => {
+      launchScreen.style.transition = 'opacity 180ms ease-out';
+      launchScreen.style.opacity = '0';
+      window.setTimeout(() => launchScreen.remove(), 210);
+    }, 80);
+    return () => window.clearTimeout(fade);
+  }, []);
+
   return null;
 }
