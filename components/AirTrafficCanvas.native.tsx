@@ -101,7 +101,7 @@ export function AirTrafficCanvas({
     const plane: AircraftInstance = {
       id: `native-plane-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
       type, x, y, heading, targetHeading: heading, speed: AIRCRAFT_DEFS[type].speed * currentLevel.speedMultiplier,
-      path: [], isLanding: false, landingProgress: 0, warningLevel: 'safe', landed: false, createdAt: Date.now(),
+      path: [], landingCleared: false, isLanding: false, landingProgress: 0, warningLevel: 'safe', landed: false, createdAt: Date.now(),
     };
     setPlanes((previous) => [...previous, plane]);
   }, [bounds, currentLevel]);

@@ -17,6 +17,7 @@ import {
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
 import { preservePlayerDrawnRoute } from '@/lib/player-routing';
+import { validateLandingRoute } from '@/lib/landing-route-validation';
 import { getDriftingCloudShadows } from '@/lib/scenery-effects';
 import * as Haptics from 'expo-haptics';
 
@@ -181,6 +182,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       targetHeading: heading,
       speed: def.speed * currentLevel.speedMultiplier,
       path: [],
+      landingCleared: false,
       isLanding: false,
       landingProgress: 0,
       warningLevel: 'safe',
@@ -616,8 +618,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     planesRef.current.forEach(p => {
       if (p.path.length > 0) {
         ctx.save();
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = p.isLanding ? '#00E676' : AIRCRAFT_DEFS[p.type].color;
+        ctx.lineWidth = p.landingCleared ? 3.5 : 2.5;
+        ctx.strokeStyle = p.landingCleared || p.isLanding ? '#00E676' : AIRCRAFT_DEFS[p.type].color;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
@@ -627,10 +629,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
         // Target waypoint node
         const endPt = p.path[p.path.length - 1];
-        ctx.fillStyle = AIRCRAFT_DEFS[p.type].color;
+        ctx.fillStyle = p.landingCleared ? '#00E676' : AIRCRAFT_DEFS[p.type].color;
         ctx.beginPath();
-        ctx.arc(endPt.x, endPt.y, 4, 0, Math.PI * 2);
+        ctx.arc(endPt.x, endPt.y, p.landingCleared ? 7 : 4, 0, Math.PI * 2);
         ctx.fill();
+        if (p.landingCleared) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(endPt.x, endPt.y, 11, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     });
@@ -673,15 +682,39 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // Active touch drawing path
     if (activeDrawPathRef.current.length > 1) {
       ctx.save();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = '#ffffff';
+      const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
+      const isLandingLocked = Boolean(selectedPlane?.landingCleared);
+      ctx.lineWidth = isLandingLocked ? 4 : 3.5;
+      ctx.strokeStyle = isLandingLocked ? '#00E676' : '#ffffff';
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
       const routeOrigin = routeStartPointRef.current ?? selectedPlane ?? activeDrawPathRef.current[0];
       ctx.moveTo(routeOrigin.x, routeOrigin.y);
       activeDrawPathRef.current.forEach(pt => ctx.lineTo(pt.x, pt.y));
       ctx.stroke();
+      if (isLandingLocked) {
+        const endpoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#00E676';
+        ctx.beginPath();
+        ctx.arc(endpoint.x, endpoint.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(endpoint.x, endpoint.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+        const lockText = '✓ CLEARED TO LAND';
+        const lockWidth = ctx.measureText(lockText).width + 14;
+        ctx.fillStyle = 'rgba(0, 81, 55, 0.94)';
+        ctx.fillRect(endpoint.x - lockWidth / 2, endpoint.y - 31, lockWidth, 17);
+        ctx.strokeStyle = '#00E676';
+        ctx.strokeRect(endpoint.x - lockWidth / 2, endpoint.y - 31, lockWidth, 17);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(lockText, endpoint.x, endpoint.y - 19);
+      }
       ctx.restore();
     }
 
@@ -993,6 +1026,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       routeStartPointRef.current = { x: closestPlane.x, y: closestPlane.y };
       activeDrawPathRef.current = [];
       closestPlane.path = [];
+      closestPlane.landingCleared = false;
       sounds.playSelect();
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1022,9 +1056,20 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         path.push({ x, y });
       }
     }
+
+    const plane = planesRef.current.find((item) => item.id === selectedPlaneIdRef.current);
+    const routeStart = routeStartPointRef.current;
+    const matchingRunway = plane && runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+    if (plane && routeStart && matchingRunway) {
+      const candidateRoute = preservePlayerDrawnRoute(routeStart, path);
+      plane.landingCleared = validateLandingRoute(plane, candidateRoute, matchingRunway).isLocked;
+    }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (clientX?: number, clientY?: number) => {
+    if (typeof clientX === 'number' && typeof clientY === 'number') {
+      handlePointerMove(clientX, clientY);
+    }
     if (selectedPlaneIdRef.current) {
       const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
       if (plane) {
@@ -1034,7 +1079,12 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           // Player intent wins: retain each point drawn with the finger, without replacing it
           // with an automatic runway approach. Landing capture still validates the final angle.
           plane.path = playerRoute;
+          const matchingRunway = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+          plane.landingCleared = Boolean(matchingRunway
+            && validateLandingRoute(plane, playerRoute, matchingRunway).isLocked);
           sounds.playSelect();
+        } else {
+          plane.landingCleared = false;
         }
       }
     }
@@ -1083,14 +1133,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           }}
           onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
           onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
-          onMouseUp={handlePointerUp}
+          onMouseUp={(e) => handlePointerUp(e.clientX, e.clientY)}
           onTouchStart={(e) => {
             if (e.touches[0]) handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
           }}
           onTouchMove={(e) => {
             if (e.touches[0]) handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
           }}
-          onTouchEnd={handlePointerUp}
+          onTouchEnd={(e) => {
+            const lastTouch = e.changedTouches[0];
+            handlePointerUp(lastTouch?.clientX, lastTouch?.clientY);
+          }}
         />
       ) : (
         <View style={{ width: dimensions.width, height: dimensions.height }} />

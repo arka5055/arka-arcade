@@ -8,6 +8,7 @@ import {
 } from '../lib/approach-routing';
 import { preservePlayerDrawnRoute } from '../lib/player-routing';
 import { getDriftingCloudShadows } from '../lib/scenery-effects';
+import { validateLandingRoute } from '../lib/landing-route-validation';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -89,6 +90,25 @@ describe('Assisted runway approach', () => {
   it('uses a generous landing capture zone to avoid precision circling', () => {
     expect(isInsideAutoLandingCapture({ x: 200, y: 270 }, runway)).toBe(true);
     expect(isInsideAutoLandingCapture({ x: 200, y: 300 }, runway)).toBe(false);
+  });
+
+  it('locks a player-drawn route only when its final segment reaches the threshold in runway direction', () => {
+    const valid = validateLandingRoute(
+      { x: 200, y: 40 },
+      [{ x: 200, y: 120 }, { x: 200, y: 196 }],
+      runway,
+    );
+    expect(valid.isLocked).toBe(true);
+    expect(valid.endpointDistance).toBeLessThanOrEqual(valid.captureRadius);
+  });
+
+  it('does not lock a route that reaches the runway with the wrong final direction', () => {
+    const invalid = validateLandingRoute(
+      { x: 120, y: 200 },
+      [{ x: 280, y: 200 }, { x: 204, y: 200 }],
+      runway,
+    );
+    expect(invalid.isLocked).toBe(false);
   });
 
   it('excludes the near-aircraft pickup points from a straight player route', () => {

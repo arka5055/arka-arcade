@@ -375,6 +375,9 @@ export default function GameScreen() {
                 {'\n'}• <Text style={{ color: '#00E676' }}>Green Seaplanes</Text> → Blue Lagoon Bay
               </Text>
               <Text style={styles.infoParagraph}>
+                ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.
+              </Text>
+              <Text style={styles.infoParagraph}>
                 ⚠️ <Text style={styles.bold}>Proximity Alarms:</Text> Keep aircraft separated! Yellow halos mean caution; flashing red halos signal imminent mid-air collision.
               </Text>
             </ScrollView>

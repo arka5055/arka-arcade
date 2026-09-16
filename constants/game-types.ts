@@ -74,6 +74,7 @@ export interface AircraftInstance {
   targetHeading: number;
   speed: number;
   path: Point[];
+  landingCleared: boolean;
   isLanding: boolean;
   landingProgress: number; // 0 to 1
   warningLevel: 'safe' | 'caution' | 'critical';
