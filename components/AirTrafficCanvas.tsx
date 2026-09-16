@@ -31,6 +31,7 @@ import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-autho
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
 import { blendLandingHeading, isForwardAlongRunway } from '@/lib/landing-motion';
 import { canSpawnInSector } from '@/lib/traffic-director';
+import { clampRadarLabel } from '@/lib/radar-ui';
 import {
   cloneRouteSnapshot,
   hasRouteEditIntent,
@@ -605,7 +606,6 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     runwaysRef.current.forEach(runway => {
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
       const isSuggestedRunway = Boolean(selectedPlane && isAssignedRunway(selectedPlane.type, runway));
-      const approachEntry = getApproachEntry(runway);
       if (runway.type === 'helipad') {
         const padSize = 58;
         const pulse = isSuggestedRunway ? 1 + Math.sin(Date.now() * 0.012) * 0.08 : 1;
@@ -724,36 +724,27 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           : 'SEAPLANE · BAY';
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const labelWidth = ctx.measureText(runwayLabel).width + 14;
+      const runwayLabelPosition = clampRadarLabel(
+        runway.startX,
+        runway.startY - 42,
+        labelWidth,
+        w,
+        h,
+      );
       ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
-      ctx.fillRect(runway.startX - labelWidth / 2, runway.startY - 42, labelWidth, 17);
+      ctx.fillRect(runwayLabelPosition.x - labelWidth / 2, runwayLabelPosition.y, labelWidth, 17);
       ctx.strokeStyle = runway.color;
       ctx.lineWidth = 1;
-      ctx.strokeRect(runway.startX - labelWidth / 2, runway.startY - 42, labelWidth, 17);
+      ctx.strokeRect(runwayLabelPosition.x - labelWidth / 2, runwayLabelPosition.y, labelWidth, 17);
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(runwayLabel, runway.startX, runway.startY - 30);
-      if (isSuggestedRunway) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(approachEntry.x, approachEntry.y);
-        ctx.lineTo(runway.startX, runway.startY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(approachEntry.x, approachEntry.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        ctx.fillText('LANDING CORRIDOR', approachEntry.x, approachEntry.y - 10);
-      }
+      ctx.fillText(runwayLabel, runwayLabelPosition.x, runwayLabelPosition.y + 12);
       ctx.restore();
     });
 
-    // 4. Draw a single high-contrast destination beam for the selected aircraft.
-    // Aircraft tags keep the destination readable before selection without crossing the board.
+    // 4. Selection highlights only the destination beacon. The aircraft tag already names
+    // the assigned route; drawing a second full-length guide beside a player route caused
+    // two same-colour strips and made it look as if the game was changing the route.
     planesRef.current.forEach((plane) => {
       if (plane.isLanding) return;
       const destination = getAssignedRunway(plane.type, runwaysRef.current);
@@ -763,16 +754,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       if (!isSelected) return;
       const color = AIRCRAFT_DEFS[plane.type].color;
       ctx.save();
-      ctx.strokeStyle = `${color}C8`;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([7, 5]);
-      ctx.beginPath();
-      ctx.moveTo(plane.x, plane.y);
-      ctx.lineTo(approach.x, approach.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
 
-      // A glowing course beacon makes the destination recognisable before the player touches a plane.
+      // A short glowing beacon marks the matching destination without adding another route line.
       const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.14;
       ctx.shadowColor = color;
       ctx.shadowBlur = 12;
@@ -789,9 +772,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
             ? 'H1'
             : 'BAY';
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+      const beaconText = `TARGET · ${courseName}`;
+      const beaconWidth = ctx.measureText(beaconText).width + 12;
+      const beaconLabelPosition = clampRadarLabel(
+        approach.x,
+        approach.y - 26,
+        beaconWidth,
+        w,
+        h,
+      );
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.9)';
+      ctx.fillRect(beaconLabelPosition.x - beaconWidth / 2, beaconLabelPosition.y, beaconWidth, 17);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(beaconLabelPosition.x - beaconWidth / 2, beaconLabelPosition.y, beaconWidth, 17);
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(`LAND ${courseName}`, approach.x, approach.y - 12);
+      ctx.fillText(beaconText, beaconLabelPosition.x, beaconLabelPosition.y + 12);
       ctx.restore();
     });
 
@@ -1363,8 +1360,16 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const isSelected = selectedPlaneIdRef.current === p.id;
       const tagText = routeLabel;
       const routeWidth = ctx.measureText(tagText).width + 12;
-      const tagX = Math.max(routeWidth / 2 + 4, Math.min(w - routeWidth / 2 - 4, p.x));
-      const tagY = Math.max(5, Math.min(h - (landing ? 40 : 22), p.y - 35));
+      const tagPosition = clampRadarLabel(
+        p.x,
+        p.y - 35,
+        routeWidth,
+        w,
+        h,
+        landing ? 35 : 17,
+      );
+      const tagX = tagPosition.x;
+      const tagY = tagPosition.y;
       ctx.fillStyle = isSelected ? 'rgba(0, 62, 77, 0.96)' : 'rgba(3, 12, 20, 0.90)';
       ctx.fillRect(tagX - routeWidth / 2, tagY, routeWidth, 16);
       ctx.strokeStyle = def.color;

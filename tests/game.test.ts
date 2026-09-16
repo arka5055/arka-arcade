@@ -28,6 +28,7 @@ import {
   restoreRouteSnapshot,
 } from '../lib/route-editing';
 import { canSpawnInSector, getActiveAircraftBudget } from '../lib/traffic-director';
+import { clampRadarLabel } from '../lib/radar-ui';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -106,6 +107,27 @@ describe('Aircraft Definitions', () => {
     expect(isAssignedRunway('seaplane', runways[2])).toBe(true);
     expect(getAssignedRunway('helicopter', runways)?.id).toBe('helipad-h1');
     expect(isAssignedRunway('helicopter', runways[0])).toBe(false);
+  });
+});
+
+describe('Radar label placement', () => {
+  it('keeps labels fully inside the iPhone radar field when a target is near every edge', () => {
+    const width = 420;
+    const height = 760;
+    const labelWidth = 92;
+    const labelHeight = 17;
+    const positions = [
+      clampRadarLabel(-30, -20, labelWidth, width, height, labelHeight),
+      clampRadarLabel(width + 30, -20, labelWidth, width, height, labelHeight),
+      clampRadarLabel(-30, height + 20, labelWidth, width, height, labelHeight),
+      clampRadarLabel(width + 30, height + 20, labelWidth, width, height, labelHeight),
+    ];
+    positions.forEach((position) => {
+      expect(position.x - labelWidth / 2).toBeGreaterThanOrEqual(5);
+      expect(position.x + labelWidth / 2).toBeLessThanOrEqual(width - 5);
+      expect(position.y).toBeGreaterThanOrEqual(5);
+      expect(position.y + labelHeight).toBeLessThanOrEqual(height - 5);
+    });
   });
 });
 
