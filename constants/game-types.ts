@@ -17,8 +17,8 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
   jet: {
     type: 'jet',
     name: 'Commercial Jet',
-    speed: 72,
-    turnSpeed: 2.8,
+    speed: 36,
+    turnSpeed: 2.4,
     scoreValue: 100,
     color: '#00E5FF', // Cyan / Light Blue
     wingspan: 30,
@@ -28,8 +28,8 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
   propeller: {
     type: 'propeller',
     name: 'Cessna Commuter',
-    speed: 52,
-    turnSpeed: 3.2,
+    speed: 28,
+    turnSpeed: 2.7,
     scoreValue: 150,
     color: '#FFB300', // Amber
     wingspan: 24,
@@ -39,8 +39,8 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
   supersonic: {
     type: 'supersonic',
     name: 'Concorde Express',
-    speed: 105,
-    turnSpeed: 2.2,
+    speed: 46,
+    turnSpeed: 2.0,
     scoreValue: 250,
     color: '#FF3D71', // Bright Coral / Red
     wingspan: 26,
@@ -50,8 +50,8 @@ export const AIRCRAFT_DEFS: Record<AircraftType, AircraftConfig> = {
   seaplane: {
     type: 'seaplane',
     name: 'Lagoon Seaplane',
-    speed: 60,
-    turnSpeed: 3.0,
+    speed: 32,
+    turnSpeed: 2.5,
     scoreValue: 180,
     color: '#00E676', // Emerald Green
     wingspan: 28,
@@ -111,7 +111,7 @@ export const LEVELS: GameLevel[] = [
     id: 1,
     title: 'Training Approach',
     targetLandings: 6,
-    spawnIntervalMs: 5000,
+    spawnIntervalMs: 9000,
     allowedTypes: ['jet', 'propeller'],
     windDirection: 0,
     windSpeed: 0,
@@ -120,7 +120,7 @@ export const LEVELS: GameLevel[] = [
     id: 2,
     title: 'Coastal Crosswind',
     targetLandings: 12,
-    spawnIntervalMs: 4200,
+    spawnIntervalMs: 7600,
     allowedTypes: ['jet', 'propeller', 'seaplane'],
     windDirection: Math.PI / 4,
     windSpeed: 2,
@@ -129,7 +129,7 @@ export const LEVELS: GameLevel[] = [
     id: 3,
     title: 'Peak Rush Hour',
     targetLandings: 20,
-    spawnIntervalMs: 3400,
+    spawnIntervalMs: 6200,
     allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
     windDirection: Math.PI / 2,
     windSpeed: 4,
@@ -138,7 +138,7 @@ export const LEVELS: GameLevel[] = [
     id: 4,
     title: 'Superstorm Radar',
     targetLandings: 30,
-    spawnIntervalMs: 2800,
+    spawnIntervalMs: 5000,
     allowedTypes: ['jet', 'propeller', 'supersonic', 'seaplane'],
     windDirection: -Math.PI / 3,
     windSpeed: 6,

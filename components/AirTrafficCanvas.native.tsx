@@ -1,0 +1,297 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  Polygon,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
+import {
+  AircraftInstance,
+  AircraftType,
+  AIRCRAFT_DEFS,
+  GameLevel,
+  LEVELS,
+  Point,
+  RunwayZone,
+} from '@/constants/game-types';
+
+interface AirTrafficCanvasProps {
+  levelIndex: number;
+  isPaused: boolean;
+  soundEnabled: boolean;
+  onPlaneLanded: (type: AircraftType, scoreGain: number, totalLandings: number) => void;
+  onGameOver: (reason: string, finalScore: number, finalLandings: number) => void;
+  onLevelComplete: (level: number) => void;
+}
+
+const routeName = (type: AircraftType) => {
+  if (type === 'jet') return 'JET → R34';
+  if (type === 'supersonic') return 'SST → R34';
+  if (type === 'propeller') return 'PROP → R28';
+  return 'SEA → BAY';
+};
+
+export function AirTrafficCanvas({
+  levelIndex,
+  isPaused,
+  onPlaneLanded,
+  onGameOver,
+  onLevelComplete,
+}: AirTrafficCanvasProps) {
+  const [bounds, setBounds] = useState({ width: 360, height: 560 });
+  const [planes, setPlanes] = useState<AircraftInstance[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draftPoint, setDraftPoint] = useState<Point | null>(null);
+  const planesRef = useRef<AircraftInstance[]>([]);
+  const selectedRef = useRef<string | null>(null);
+  const landingsRef = useRef(0);
+  const scoreRef = useRef(0);
+  const gameOverRef = useRef(false);
+  const lastSpawnRef = useRef(0);
+  const currentLevel: GameLevel = LEVELS[levelIndex] ?? LEVELS[0];
+
+  const runways = useMemo<RunwayZone[]>(() => {
+    const { width: w, height: h } = bounds;
+    return [
+      {
+        id: 'runway-main', name: 'JET + SST · R34', startX: w * 0.66, startY: h * 0.18,
+        endX: w * 0.66, endY: h * 0.78, allowedTypes: ['jet', 'supersonic'],
+        heading: Math.PI / 2, headingTolerance: 1.1, touchdownRadius: 34, color: '#00E5FF', type: 'runway',
+      },
+      {
+        id: 'runway-diagonal', name: 'PROP · R28', startX: w * 0.23, startY: h * 0.29,
+        endX: w * 0.85, endY: h * 0.64, allowedTypes: ['propeller'],
+        heading: Math.atan2(h * 0.35, w * 0.62), headingTolerance: 1.1, touchdownRadius: 32, color: '#FFB300', type: 'runway',
+      },
+      {
+        id: 'water-bay', name: 'SEAPLANE · BAY', startX: w * 0.20, startY: h * 0.72,
+        endX: w * 0.43, endY: h * 0.88, allowedTypes: ['seaplane'],
+        heading: Math.atan2(h * 0.16, w * 0.23), headingTolerance: 1.2, touchdownRadius: 38, color: '#00E676', type: 'water',
+      },
+    ];
+  }, [bounds]);
+
+  const spawnPlane = useCallback(() => {
+    const { width: w, height: h } = bounds;
+    if (w < 80 || h < 80 || gameOverRef.current) return;
+    const type = currentLevel.allowedTypes[Math.floor(Math.random() * currentLevel.allowedTypes.length)];
+    const edge = Math.floor(Math.random() * 4);
+    const margin = 22;
+    let x = margin;
+    let y = margin;
+    let heading = 0;
+
+    if (edge === 0) { x = margin + Math.random() * (w - margin * 2); y = -6; heading = Math.PI / 2; }
+    if (edge === 1) { x = w + 6; y = margin + Math.random() * (h - margin * 2); heading = Math.PI; }
+    if (edge === 2) { x = margin + Math.random() * (w - margin * 2); y = h + 6; heading = -Math.PI / 2; }
+    if (edge === 3) { x = -6; y = margin + Math.random() * (h - margin * 2); heading = 0; }
+
+    const plane: AircraftInstance = {
+      id: `native-plane-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+      type, x, y, heading, targetHeading: heading, speed: AIRCRAFT_DEFS[type].speed,
+      path: [], isLanding: false, landingProgress: 0, warningLevel: 'safe', landed: false, createdAt: Date.now(),
+    };
+    setPlanes((previous) => [...previous, plane]);
+  }, [bounds, currentLevel]);
+
+  useEffect(() => {
+    planesRef.current = planes;
+  }, [planes]);
+
+  useEffect(() => {
+    gameOverRef.current = false;
+    landingsRef.current = 0;
+    scoreRef.current = 0;
+    setPlanes([]);
+    const firstFlight = setTimeout(spawnPlane, 650);
+    return () => clearTimeout(firstFlight);
+  }, [levelIndex, spawnPlane]);
+
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(() => {
+      if (gameOverRef.current) return;
+      const now = Date.now();
+      if (now - lastSpawnRef.current > currentLevel.spawnIntervalMs) {
+        spawnPlane();
+        lastSpawnRef.current = now;
+      }
+
+      setPlanes((previous) => {
+        const next = previous.flatMap((plane) => {
+          const target = plane.path[0];
+          let targetHeading = plane.targetHeading;
+          if (target) targetHeading = Math.atan2(target.y - plane.y, target.x - plane.x);
+          else if (plane.x < -25 || plane.x > bounds.width + 25 || plane.y < -25 || plane.y > bounds.height + 25) {
+            targetHeading = Math.atan2(bounds.height / 2 - plane.y, bounds.width / 2 - plane.x);
+          }
+
+          let diff = targetHeading - plane.heading;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          const turnStep = AIRCRAFT_DEFS[plane.type].turnSpeed * 0.06;
+          const heading = Math.abs(diff) < turnStep ? targetHeading : plane.heading + Math.sign(diff) * turnStep;
+          const speed = plane.speed * 0.72;
+          const moved: AircraftInstance = {
+            ...plane,
+            heading,
+            targetHeading,
+            x: plane.x + Math.cos(heading) * speed * 0.06,
+            y: plane.y + Math.sin(heading) * speed * 0.06,
+            path: target && Math.hypot(target.x - plane.x, target.y - plane.y) < 12 ? [] : plane.path,
+          };
+
+          const runway = runways.find((item) => item.allowedTypes.includes(moved.type));
+          if (runway && moved.path.length > 0 && Math.hypot(moved.x - runway.startX, moved.y - runway.startY) < runway.touchdownRadius) {
+            landingsRef.current += 1;
+            scoreRef.current += AIRCRAFT_DEFS[moved.type].scoreValue;
+            setTimeout(() => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              onPlaneLanded(moved.type, AIRCRAFT_DEFS[moved.type].scoreValue, landingsRef.current);
+              if (landingsRef.current >= currentLevel.targetLandings) onLevelComplete(levelIndex + 1);
+            }, 0);
+            return [];
+          }
+          return [moved];
+        });
+
+        for (let i = 0; i < next.length; i += 1) {
+          for (let j = i + 1; j < next.length; j += 1) {
+            if (Math.hypot(next[i].x - next[j].x, next[i].y - next[j].y) < 22) {
+              gameOverRef.current = true;
+              setTimeout(() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                onGameOver('Mid-air Collision!', scoreRef.current, landingsRef.current);
+              }, 0);
+            }
+          }
+        }
+        return next;
+      });
+    }, 60);
+    return () => clearInterval(timer);
+  }, [bounds, currentLevel, isPaused, levelIndex, onGameOver, onLevelComplete, onPlaneLanded, runways, spawnPlane]);
+
+  const pointFromEvent = (event: any): Point => ({
+    x: event.nativeEvent.locationX,
+    y: event.nativeEvent.locationY,
+  });
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => selectedRef.current !== null,
+    onPanResponderGrant: (event) => {
+      if (isPaused || gameOverRef.current) return;
+      const point = pointFromEvent(event);
+      const found = planesRef.current.find((plane) => Math.hypot(plane.x - point.x, plane.y - point.y) < 42);
+      if (found) {
+        selectedRef.current = found.id;
+        setSelectedId(found.id);
+        setDraftPoint(point);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    },
+    onPanResponderMove: (event) => {
+      if (selectedRef.current) setDraftPoint(pointFromEvent(event));
+    },
+    onPanResponderRelease: (event) => {
+      const id = selectedRef.current;
+      if (id) {
+        const point = pointFromEvent(event);
+        setPlanes((previous) => previous.map((plane) => plane.id === id ? { ...plane, path: [point] } : plane));
+      }
+      selectedRef.current = null;
+      setSelectedId(null);
+      setDraftPoint(null);
+    },
+    onPanResponderTerminate: () => {
+      selectedRef.current = null;
+      setSelectedId(null);
+      setDraftPoint(null);
+    },
+  }), [isPaused]);
+
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 100 && height > 100) setBounds({ width, height });
+  };
+
+  return (
+    <View style={styles.container} onLayout={onLayout} {...panResponder.panHandlers}>
+      <Svg width={bounds.width} height={bounds.height}>
+        <Defs>
+          <LinearGradient id="ocean" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#04121f" />
+            <Stop offset="0.52" stopColor="#0b2f45" />
+            <Stop offset="1" stopColor="#061a2a" />
+          </LinearGradient>
+          <LinearGradient id="land" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#285541" />
+            <Stop offset="1" stopColor="#102d28" />
+          </LinearGradient>
+        </Defs>
+        <Rect width={bounds.width} height={bounds.height} fill="url(#ocean)" />
+        <Path
+          d={`M ${bounds.width * 0.1} ${bounds.height * 0.08} C ${bounds.width * 0.65} ${bounds.height * 0.02}, ${bounds.width * 0.95} ${bounds.height * 0.2}, ${bounds.width * 0.92} ${bounds.height * 0.5} C ${bounds.width * 0.9} ${bounds.height * 0.85}, ${bounds.width * 0.55} ${bounds.height * 0.94}, ${bounds.width * 0.25} ${bounds.height * 0.86} C ${bounds.width * 0.05} ${bounds.height * 0.7}, ${bounds.width * 0.02} ${bounds.height * 0.3}, ${bounds.width * 0.1} ${bounds.height * 0.08}`}
+          fill="url(#land)" stroke="#56d49d" strokeOpacity={0.6} strokeWidth={3}
+        />
+        {[60, 120, 180, 240].map((radius) => <Circle key={radius} cx={bounds.width * 0.5} cy={bounds.height * 0.5} r={radius} fill="none" stroke="#00e5ff" strokeOpacity={0.12} />)}
+        <Rect x={bounds.width * 0.17} y={bounds.height * 0.4} width={bounds.width * 0.27} height={bounds.height * 0.26} fill="#202d37" stroke="#ffbe46" strokeOpacity={0.4} />
+        <SvgText x={bounds.width * 0.19} y={bounds.height * 0.43} fill="#e1eef5" fontSize={9} fontWeight="700">SKYLINE TERMINAL</SvgText>
+
+        {runways.map((runway) => (
+          <G key={runway.id}>
+            <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke={runway.type === 'water' ? '#006455' : '#121923'} strokeWidth={28} strokeLinecap="round" />
+            <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke={runway.color} strokeWidth={3} strokeDasharray="8 7" strokeLinecap="round" />
+            {runway.type === 'runway' && <Line x1={runway.startX} y1={runway.startY} x2={runway.endX} y2={runway.endY} stroke="#ffffff" strokeOpacity={0.9} strokeWidth={2} strokeDasharray="6 6" />}
+            <Circle cx={runway.startX} cy={runway.startY} r={runway.touchdownRadius} fill="#030c14" fillOpacity={0.88} stroke={runway.color} strokeWidth={3} />
+            <Rect x={runway.startX - 48} y={runway.startY - runway.touchdownRadius - 24} width={96} height={17} fill="#030c14" stroke={runway.color} rx={2} />
+            <SvgText x={runway.startX} y={runway.startY - runway.touchdownRadius - 12} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{runway.name}</SvgText>
+          </G>
+        ))}
+
+        {planes.map((plane) => {
+          const def = AIRCRAFT_DEFS[plane.type];
+          const target = plane.path[0];
+          const tag = routeName(plane.type);
+          return (
+            <G key={plane.id}>
+              {target && <Line x1={plane.x} y1={plane.y} x2={target.x} y2={target.y} stroke={def.color} strokeWidth={2.5} strokeDasharray="5 5" />}
+              {selectedId === plane.id && <Circle cx={plane.x} cy={plane.y} r={28} fill="none" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" />}
+              <G transform={`translate(${plane.x} ${plane.y}) rotate(${plane.heading * 180 / Math.PI})`}>
+                <Polygon points="18,0 -11,-12 -5,0 -11,12" fill={def.color} stroke="#ffffff" strokeWidth={1.3} />
+                <Circle cx={6} cy={0} r={2.2} fill="#10213a" />
+              </G>
+              <Rect x={plane.x - 33} y={plane.y - 35} width={66} height={16} fill="#030c14" fillOpacity={0.92} stroke={def.color} rx={2} />
+              <SvgText x={plane.x} y={plane.y - 24} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">{tag}</SvgText>
+            </G>
+          );
+        })}
+        {selectedId && draftPoint && (() => {
+          const plane = planes.find((item) => item.id === selectedId);
+          return plane ? <Line x1={plane.x} y1={plane.y} x2={draftPoint.x} y2={draftPoint.y} stroke="#ffffff" strokeWidth={3} strokeDasharray="6 5" /> : null;
+        })()}
+      </Svg>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#061a29',
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 229, 255, 0.30)',
+  },
+});

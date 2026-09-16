@@ -17,6 +17,12 @@ describe('Aircraft Definitions', () => {
   it('verifies supersonic is faster than propeller', () => {
     expect(AIRCRAFT_DEFS.supersonic.speed).toBeGreaterThan(AIRCRAFT_DEFS.propeller.speed);
   });
+
+  it('keeps every aircraft at a touch-friendly speed', () => {
+    Object.values(AIRCRAFT_DEFS).forEach((aircraft) => {
+      expect(aircraft.speed).toBeLessThanOrEqual(50);
+    });
+  });
 });
 
 describe('Game Levels Configuration', () => {
@@ -31,5 +37,9 @@ describe('Game Levels Configuration', () => {
   it('allows seaplanes only in later levels', () => {
     expect(LEVELS[0].allowedTypes).not.toContain('seaplane');
     expect(LEVELS[1].allowedTypes).toContain('seaplane');
+  });
+
+  it('gives the training level enough time between aircraft', () => {
+    expect(LEVELS[0].spawnIntervalMs).toBeGreaterThanOrEqual(8000);
   });
 });

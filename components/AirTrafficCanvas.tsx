@@ -342,16 +342,31 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // Clear
     ctx.clearRect(0, 0, w, h);
 
-    // 1. Airport Map Background
-    // Deep Ocean / Coastal Water
+    // 1. Premium airport map background: deep ocean, island, apron and taxiways
     const waterGrad = ctx.createLinearGradient(0, 0, w, h);
-    waterGrad.addColorStop(0, '#061a29');
-    waterGrad.addColorStop(1, '#09273c');
+    waterGrad.addColorStop(0, '#04121f');
+    waterGrad.addColorStop(0.55, '#092b3f');
+    waterGrad.addColorStop(1, '#061a2a');
     ctx.fillStyle = waterGrad;
     ctx.fillRect(0, 0, w, h);
 
+    // Fine ocean-current lines add depth without competing with the aircraft.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(80, 196, 224, 0.07)';
+    ctx.lineWidth = 1;
+    for (let offset = -h; offset < w + h; offset += 34) {
+      ctx.beginPath();
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset + h, h);
+      ctx.stroke();
+    }
+    ctx.restore();
+
     // Island landmass polygon
-    ctx.fillStyle = '#102d28';
+    const islandGrad = ctx.createLinearGradient(w * 0.1, h * 0.1, w * 0.9, h * 0.9);
+    islandGrad.addColorStop(0, '#244e3f');
+    islandGrad.addColorStop(1, '#102d28');
+    ctx.fillStyle = islandGrad;
     ctx.beginPath();
     ctx.moveTo(w * 0.10, h * 0.08);
     ctx.bezierCurveTo(w * 0.65, h * 0.02, w * 0.95, h * 0.20, w * 0.92, h * 0.50);
@@ -361,8 +376,30 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     // Sandy coast shoreline border
     ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(78, 175, 124, 0.4)';
+    ctx.strokeStyle = 'rgba(86, 212, 157, 0.58)';
     ctx.stroke();
+
+    // Terminal apron and taxiway grid give the airport a more recognizable place.
+    ctx.save();
+    const apronX = w * 0.18;
+    const apronY = h * 0.38;
+    const apronW = w * 0.27;
+    const apronH = h * 0.30;
+    ctx.fillStyle = 'rgba(33, 45, 57, 0.92)';
+    ctx.fillRect(apronX, apronY, apronW, apronH);
+    ctx.strokeStyle = 'rgba(255, 190, 70, 0.5)';
+    ctx.lineWidth = 1;
+    for (let tx = apronX + 14; tx < apronX + apronW; tx += 26) {
+      ctx.beginPath();
+      ctx.moveTo(tx, apronY + 8);
+      ctx.lineTo(tx, apronY + apronH - 8);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#d8e5ef';
+    ctx.font = '700 9px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SKYLINE TERMINAL', apronX + 10, apronY + 16);
+    ctx.restore();
 
     // 2. Radar Concentric Rings & Radial Scan
     const cx = w * 0.5;
@@ -390,20 +427,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     ctx.fill();
     ctx.restore();
 
-    // 3. Draw Runways & Landing Corridors
+    // 3. Draw runways, bright approach gates and unambiguous destination labels.
     runwaysRef.current.forEach(runway => {
       // Runway asphalt strip
       ctx.save();
-      ctx.lineWidth = runway.type === 'water' ? 26 : 22;
+      ctx.shadowColor = runway.color;
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = runway.type === 'water' ? 30 : 28;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = runway.type === 'water' ? 'rgba(0, 230, 118, 0.28)' : '#1f242e';
+      ctx.strokeStyle = runway.type === 'water' ? 'rgba(0, 100, 85, 0.72)' : '#121923';
       ctx.beginPath();
       ctx.moveTo(runway.startX, runway.startY);
       ctx.lineTo(runway.endX, runway.endY);
       ctx.stroke();
 
       // Border lights / threshold
-      ctx.lineWidth = 2;
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 3;
       ctx.strokeStyle = runway.color;
       ctx.setLineDash([8, 8]);
       ctx.stroke();
@@ -422,10 +462,12 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
 
       // Touchdown Entry Gate (Circle & pulsing ring)
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.strokeStyle = runway.color;
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
       ctx.beginPath();
       ctx.arc(runway.startX, runway.startY, runway.touchdownRadius, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
 
       // Approach glidecone indicator
@@ -439,11 +481,22 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.closePath();
       ctx.fill();
 
-      // Runway Badge Label
+      // Large color plus text label means a player never needs to interpret color alone.
+      const runwayLabel = runway.id === 'runway-main'
+        ? 'JET + SST · R34'
+        : runway.id === 'runway-diagonal'
+          ? 'PROP · R28'
+          : 'SEAPLANE · BAY';
+      ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+      const labelWidth = ctx.measureText(runwayLabel).width + 14;
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
+      ctx.fillRect(runway.startX - labelWidth / 2, runway.startY - runway.touchdownRadius - 24, labelWidth, 17);
+      ctx.strokeStyle = runway.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(runway.startX - labelWidth / 2, runway.startY - runway.touchdownRadius - 24, labelWidth, 17);
       ctx.fillStyle = '#ffffff';
-      ctx.font = '10px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(runway.name, runway.startX, runway.startY - runway.touchdownRadius - 4);
+      ctx.fillText(runwayLabel, runway.startX, runway.startY - runway.touchdownRadius - 12);
       ctx.restore();
     });
 
@@ -591,6 +644,28 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.setLineDash([]);
       }
 
+      ctx.restore();
+
+      // High contrast callsign chip: the route is readable without relying on colour.
+      const routeLabel = p.type === 'jet'
+        ? 'JET → R34'
+        : p.type === 'supersonic'
+          ? 'SST → R34'
+          : p.type === 'propeller'
+            ? 'PROP → R28'
+            : 'SEA → BAY';
+      ctx.save();
+      ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+      const routeWidth = ctx.measureText(routeLabel).width + 12;
+      const tagY = p.y - 35;
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
+      ctx.fillRect(p.x - routeWidth / 2, tagY, routeWidth, 16);
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(p.x - routeWidth / 2, tagY, routeWidth, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(routeLabel, p.x, tagY + 11.5);
       ctx.restore();
     });
   }, [dimensions]);

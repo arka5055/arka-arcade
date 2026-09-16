@@ -27,6 +27,7 @@ export default function GameScreen() {
   const [score, setScore] = useState(0);
   const [landings, setLandings] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [runId, setRunId] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [stats, setStats] = useState<GameStats>(DEFAULT_STATS);
@@ -124,14 +125,14 @@ export default function GameScreen() {
   }, []);
 
   const restartCurrentGame = () => {
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
     setShowGameOver(false);
     setShowLevelComplete(false);
     setScore(0);
     setLandings(0);
     setCombo(0);
     setIsPaused(false);
-    // Trigger reset by refreshing levelIndex
-    setLevelIndex((prev) => prev);
+    setRunId((previousRunId) => previousRunId + 1);
   };
 
   const nextLevelProceed = () => {
@@ -235,7 +236,7 @@ export default function GameScreen() {
       {/* Main Touch Radar Field */}
       <View style={styles.canvasContainer}>
         <AirTrafficCanvas
-          key={`canvas-${levelIndex}`}
+          key={`canvas-${levelIndex}-${runId}`}
           levelIndex={levelIndex}
           isPaused={isPaused}
           soundEnabled={soundEnabled}
@@ -263,15 +264,15 @@ export default function GameScreen() {
       <View style={styles.bottomDock}>
         <View style={styles.legendItem}>
           <View style={[styles.legendIndicator, { backgroundColor: '#00E5FF' }]} />
-          <Text style={styles.legendText}>Jets (Main 34)</Text>
+          <Text style={styles.legendText}>JET / SST → R34</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendIndicator, { backgroundColor: '#FFB300' }]} />
-          <Text style={styles.legendText}>Props (Diag 28)</Text>
+          <Text style={styles.legendText}>PROP → R28</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendIndicator, { backgroundColor: '#00E676' }]} />
-          <Text style={styles.legendText}>Seaplane (Bay)</Text>
+          <Text style={styles.legendText}>SEA → BAY</Text>
         </View>
       </View>
 
