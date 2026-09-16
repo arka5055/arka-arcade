@@ -28,6 +28,7 @@ import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
+import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -78,6 +79,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const sceneryImageRef = useRef<HTMLImageElement | null>(null);
   const crashEffectRef = useRef<CrashEffect | null>(null);
   const crashReportedRef = useRef(false);
+  const activeConflictsRef = useRef<TrafficConflict[]>([]);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
@@ -229,6 +231,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const planes = planesRef.current;
     let hasCritical = false;
     let hasPredictiveAlert = false;
+    const conflicts: TrafficConflict[] = [];
 
     for (let i = 0; i < planes.length; i++) {
       planes[i].warningLevel = 'safe';
@@ -245,14 +248,6 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const dx = p1.x - p2.x;
         const dy = p1.y - p2.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        // Project the existing headings ahead ~2 seconds so controllers are warned
-        // before aircraft become visually close.
-        const lookAheadSeconds = 2;
-        const projectedDx = (p1.x + Math.cos(p1.heading) * p1.speed * lookAheadSeconds)
-          - (p2.x + Math.cos(p2.heading) * p2.speed * lookAheadSeconds);
-        const projectedDy = (p1.y + Math.sin(p1.heading) * p1.speed * lookAheadSeconds)
-          - (p2.y + Math.sin(p2.heading) * p2.speed * lookAheadSeconds);
-        const projectedDistance = Math.sqrt(projectedDx * projectedDx + projectedDy * projectedDy);
         const combinedSafetyRadius = getAircraftSafetyRadius(p1.type) + getAircraftSafetyRadius(p2.type);
 
         // Contact space reflects each vehicle's physical footprint: a compact
@@ -266,15 +261,22 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             }
           }
+          activeConflictsRef.current = [];
           return;
         }
 
+        const conflict = classifyTrafficConflict(
+          { id: p1.id, x: p1.x, y: p1.y, heading: p1.heading, speed: p1.speed, safetyRadius: getAircraftSafetyRadius(p1.type) },
+          { id: p2.id, x: p2.x, y: p2.y, heading: p2.heading, speed: p2.speed, safetyRadius: getAircraftSafetyRadius(p2.type) },
+        );
+        if (conflict) conflicts.push(conflict);
+
         // Immediate danger uses red; predicted convergence uses amber well in advance.
-        if (dist < combinedSafetyRadius + 38) {
+        if (conflict?.severity === 'critical') {
           p1.warningLevel = 'critical';
           p2.warningLevel = 'critical';
           hasCritical = true;
-        } else if ((dist < combinedSafetyRadius + 88 || projectedDistance < combinedSafetyRadius + 52)
+        } else if (conflict?.severity === 'caution'
           && p1.warningLevel !== 'critical' && p2.warningLevel !== 'critical') {
           p1.warningLevel = 'caution';
           p2.warningLevel = 'caution';
@@ -282,6 +284,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       }
     }
+
+    activeConflictsRef.current = conflicts;
 
     if (hasCritical && warningBeepCooldownRef.current <= 0) {
       sounds.playWarning();
@@ -782,39 +786,88 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
     });
 
-    // Predictive traffic alert: a controller sees the conflict before the aircraft overlap.
-    const alertAircraft = planesRef.current.filter((plane) => plane.warningLevel !== 'safe');
-    if (alertAircraft.length > 0) {
-      const isCritical = alertAircraft.some((plane) => plane.warningLevel === 'critical');
-      const alertColor = isCritical ? '#FF3D71' : '#FFB300';
+    // Pair-specific collision warning: highlight only the aircraft that are converging,
+    // connect them with a pulsating conflict line, and flash the board edge before impact.
+    const conflicts = activeConflictsRef.current;
+    if (conflicts.length > 0) {
+      const hasCriticalConflict = conflicts.some((conflict) => conflict.severity === 'critical');
+      const alertColor = getConflictColor(hasCriticalConflict ? 'critical' : 'caution');
+      const flash = 0.5 + Math.sin(Date.now() * (hasCriticalConflict ? 0.018 : 0.012)) * 0.5;
+      const uniqueAircraft = new Set(conflicts.flatMap((conflict) => [conflict.firstId, conflict.secondId]));
       ctx.save();
-      ctx.fillStyle = 'rgba(3, 12, 20, 0.90)';
-      ctx.fillRect(w / 2 - 112, 12, 224, 24);
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.94)';
+      ctx.fillRect(w / 2 - 118, 12, 236, 28);
       ctx.strokeStyle = alertColor;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(w / 2 - 112, 12, 224, 24);
+      ctx.lineWidth = 2 + flash * 1.5;
+      ctx.shadowColor = alertColor;
+      ctx.shadowBlur = 10 + flash * 8;
+      ctx.strokeRect(w / 2 - 118, 12, 236, 28);
+      ctx.shadowBlur = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.font = '800 11px -apple-system, system-ui, sans-serif';
+      ctx.font = '900 11px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(isCritical ? '⚠ IMMEDIATE SEPARATION' : '⚠ TRAFFIC WILL CONVERGE', w / 2, 28);
+      ctx.fillText(hasCriticalConflict ? '⚠ TURN NOW · COLLISION RISK' : '⚠ CONFLICT AHEAD · ADJUST COURSE', w / 2, 30);
       ctx.restore();
 
-      alertAircraft.forEach((plane) => {
-        const vectorLength = plane.warningLevel === 'critical' ? 38 : 54;
+      conflicts.forEach((conflict) => {
+        const first = planesRef.current.find((plane) => plane.id === conflict.firstId);
+        const second = planesRef.current.find((plane) => plane.id === conflict.secondId);
+        if (!first || !second) return;
+        const color = getConflictColor(conflict.severity);
+        const radius = conflict.safetyDistance + (conflict.severity === 'critical' ? 20 : 32) + flash * 5;
         ctx.save();
-        ctx.strokeStyle = alertColor;
+        ctx.strokeStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8 + flash * 12;
+        ctx.lineWidth = conflict.severity === 'critical' ? 3 : 2.2;
+        ctx.setLineDash(conflict.severity === 'critical' ? [5, 4] : [3, 6]);
+        ctx.beginPath();
+        ctx.moveTo(first.x, first.y);
+        ctx.lineTo(second.x, second.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        [first, second].forEach((plane) => {
+          ctx.beginPath();
+          ctx.arc(plane.x, plane.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = `${color}2A`;
+          ctx.fill();
+        });
+        const midpointX = (first.x + second.x) / 2;
+        const midpointY = (first.y + second.y) / 2;
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(midpointX, midpointY, 10 + flash * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#08131f';
+        ctx.font = '900 10px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', midpointX, midpointY + 3.5);
+        ctx.restore();
+      });
+
+      uniqueAircraft.forEach((id) => {
+        const plane = planesRef.current.find((item) => item.id === id);
+        if (!plane) return;
+        const vectorLength = plane.warningLevel === 'critical' ? 50 : 64;
+        ctx.save();
+        ctx.strokeStyle = plane.warningLevel === 'critical' ? '#FF3D71' : '#FFB300';
         ctx.lineWidth = 2;
         ctx.setLineDash([3, 4]);
         ctx.beginPath();
         ctx.moveTo(plane.x, plane.y);
-        ctx.lineTo(
-          plane.x + Math.cos(plane.heading) * vectorLength,
-          plane.y + Math.sin(plane.heading) * vectorLength,
-        );
+        ctx.lineTo(plane.x + Math.cos(plane.heading) * vectorLength, plane.y + Math.sin(plane.heading) * vectorLength);
         ctx.stroke();
-        ctx.setLineDash([]);
         ctx.restore();
       });
+
+      ctx.save();
+      ctx.strokeStyle = alertColor;
+      ctx.globalAlpha = 0.24 + flash * 0.32;
+      ctx.lineWidth = 3.5;
+      ctx.strokeRect(5, 5, w - 10, h - 10);
+      ctx.restore();
     }
 
     // Active touch drawing path

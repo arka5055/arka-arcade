@@ -20,6 +20,7 @@ import { getAssignedRunway, isAssignedRunway } from '../lib/runway-assignment';
 import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering } from '../lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from '../lib/landing-sequence';
 import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
+import { classifyTrafficConflict, getConflictColor } from '../lib/traffic-conflicts';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -161,6 +162,27 @@ describe('Collision feedback', () => {
     expect(getCrashProgress(crash)).toBe(0);
     crash.elapsed = crash.duration * 2;
     expect(getCrashProgress(crash)).toBe(1);
+  });
+});
+
+describe('Predictive traffic conflict warnings', () => {
+  const jet = { id: 'jet-1', x: 100, y: 100, heading: 0, speed: 38, safetyRadius: 24 };
+
+  it('identifies a close pair as a critical red turn-now conflict', () => {
+    const conflict = classifyTrafficConflict(jet, { ...jet, id: 'jet-2', x: 150, heading: Math.PI });
+    expect(conflict?.severity).toBe('critical');
+    expect(getConflictColor(conflict!.severity)).toBe('#FF3D71');
+  });
+
+  it('raises an amber warning for converging aircraft before they are visually close', () => {
+    const conflict = classifyTrafficConflict(jet, { ...jet, id: 'jet-2', x: 200, heading: Math.PI });
+    expect(conflict?.severity).toBe('caution');
+    expect(getConflictColor(conflict!.severity)).toBe('#FFB300');
+  });
+
+  it('does not distract the player with an alert for separating traffic', () => {
+    const conflict = classifyTrafficConflict(jet, { ...jet, id: 'jet-2', x: 300, heading: 0 });
+    expect(conflict).toBeNull();
   });
 });
 
