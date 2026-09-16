@@ -21,6 +21,7 @@ import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering }
 import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from '../lib/landing-sequence';
 import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor } from '../lib/traffic-conflicts';
+import { blendLandingHeading, isForwardAlongRunway } from '../lib/landing-motion';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -300,6 +301,26 @@ describe('Assisted runway approach', () => {
       runway,
     );
     expect(invalid.isLocked).toBe(false);
+  });
+
+  it('does not clear a path whose end has already crossed the runway threshold', () => {
+    const overshot = validateLandingRoute(
+      { x: 200, y: 40 },
+      [{ x: 200, y: 120 }, { x: 200, y: 222 }],
+      runway,
+    );
+    expect(overshot.headingDifference).toBeCloseTo(0, 6);
+    expect(overshot.thresholdProjection).toBeGreaterThan(4);
+    expect(overshot.isLocked).toBe(false);
+  });
+
+  it('blends into the runway direction and never reverses along the landing track', () => {
+    const entryHeading = 0.45;
+    const runwayHeading = Math.PI / 2;
+    expect(blendLandingHeading(entryHeading, runwayHeading, 0)).toBeCloseTo(entryHeading, 6);
+    expect(blendLandingHeading(entryHeading, runwayHeading, 1)).toBeCloseTo(runwayHeading, 6);
+    expect(isForwardAlongRunway(200, 160, 200, 198, runwayHeading)).toBe(true);
+    expect(isForwardAlongRunway(200, 202, 200, 198, runwayHeading)).toBe(false);
   });
 
   it('locks a helicopter route when it reaches the H1 pad from any direction', () => {

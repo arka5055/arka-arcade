@@ -29,6 +29,7 @@ import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
+import { blendLandingHeading, isForwardAlongRunway } from '@/lib/landing-motion';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -316,8 +317,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           const entry = p.landingEntry ?? { x: p.x, y: p.y };
           p.landingEntry = entry;
           p.landingEntrySpeed ??= p.speed;
+          p.landingEntryHeading ??= p.heading;
           p.speed = p.landingEntrySpeed * landing.speedFactor;
-          p.heading = targetRunway.heading;
+          p.heading = targetRunway.type === 'helipad'
+            ? p.landingEntryHeading
+            : blendLandingHeading(p.landingEntryHeading, targetRunway.heading, landing.approachBlend);
 
           if (targetRunway.type === 'helipad') {
             p.x = entry.x + (targetRunway.startX - entry.x) * landing.approachBlend;
@@ -328,6 +332,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           } else {
             p.x = targetRunway.startX + (targetRunway.endX - targetRunway.startX) * landing.runwayProgress;
             p.y = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * landing.runwayProgress;
+          }
+          // A malformed route can never make the landing animation travel back up the runway.
+          if (targetRunway.type !== 'helipad' && !isForwardAlongRunway(entry.x, entry.y, p.x, p.y, targetRunway.heading)) {
+            p.x = targetRunway.startX;
+            p.y = targetRunway.startY;
           }
         }
 
@@ -398,11 +407,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           isHelipad: assignedRunway.type === 'helipad',
         });
         if (authorized) {
+          const incomingHeading = p.heading;
           p.isLanding = true;
           p.path = [];
-          p.heading = assignedRunway.heading;
+          p.heading = incomingHeading;
           p.landingEntry = { x: p.x, y: p.y };
           p.landingEntrySpeed = p.speed;
+          p.landingEntryHeading = incomingHeading;
         }
       }
 

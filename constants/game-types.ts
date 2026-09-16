@@ -91,6 +91,7 @@ export interface AircraftInstance {
   /** Captures the moment final landing control begins so approach blends continuously into the threshold. */
   landingEntry?: Point;
   landingEntrySpeed?: number;
+  landingEntryHeading?: number;
   warningLevel: 'safe' | 'caution' | 'critical';
   landed: boolean;
   createdAt: number;

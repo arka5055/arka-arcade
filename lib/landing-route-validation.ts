@@ -5,6 +5,8 @@ export interface LandingRouteValidation {
   endpointDistance: number;
   headingDifference: number;
   captureRadius: number;
+  /** Signed distance along runway travel direction; values above zero have crossed the threshold. */
+  thresholdProjection: number;
 }
 
 function shortestAngleDifference(first: number, second: number): number {
@@ -25,7 +27,13 @@ export function validateLandingRoute(
 ): LandingRouteValidation {
   const captureRadius = runway.touchdownRadius + 42;
   if (route.length === 0) {
-    return { isLocked: false, endpointDistance: Infinity, headingDifference: Infinity, captureRadius };
+    return {
+      isLocked: false,
+      endpointDistance: Infinity,
+      headingDifference: Infinity,
+      captureRadius,
+      thresholdProjection: Infinity,
+    };
   }
 
   const endpoint = route[route.length - 1];
@@ -34,11 +42,19 @@ export function validateLandingRoute(
   const finalHeading = Math.atan2(endpoint.y - previousPoint.y, endpoint.x - previousPoint.x);
   const headingDifference = shortestAngleDifference(finalHeading, runway.heading);
   const isHelipad = runway.type === 'helipad';
+  const thresholdProjection = (endpoint.x - runway.startX) * Math.cos(runway.heading)
+    + (endpoint.y - runway.startY) * Math.sin(runway.heading);
+  // A path may finish on the threshold or a few pixels beyond it for touch tolerance,
+  // but must not continue down the runway: that would make the landing blend move backward.
+  const endsOnApproachSide = isHelipad || thresholdProjection <= 4;
 
   return {
-    isLocked: endpointDistance <= captureRadius && (isHelipad || headingDifference <= runway.headingTolerance),
+    isLocked: endpointDistance <= captureRadius
+      && endsOnApproachSide
+      && (isHelipad || headingDifference <= runway.headingTolerance),
     endpointDistance,
     headingDifference,
     captureRadius,
+    thresholdProjection,
   };
 }

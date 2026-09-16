@@ -30,6 +30,7 @@ import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { validateLandingRoute } from '@/lib/landing-route-validation';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
+import { blendLandingHeading } from '@/lib/landing-motion';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -146,6 +147,7 @@ export function AirTrafficCanvas({
             const landingProgress = Math.min(1, plane.landingProgress + 0.06 / getLandingDuration(plane.type));
             const landing = getLandingSequence(plane.type, landingProgress);
             const entry = plane.landingEntry ?? { x: plane.x, y: plane.y };
+            const entryHeading = plane.landingEntryHeading ?? plane.heading;
             if (landingProgress >= 1) {
               landingsRef.current += 1;
               scoreRef.current += AIRCRAFT_DEFS[plane.type].scoreValue;
@@ -158,10 +160,13 @@ export function AirTrafficCanvas({
             }
             return [{
               ...plane,
-              heading: assignedRunway.heading,
+              heading: assignedRunway.type === 'helipad'
+                ? entryHeading
+                : blendLandingHeading(entryHeading, assignedRunway.heading, landing.approachBlend),
               landingProgress,
               landingEntry: entry,
               landingEntrySpeed: plane.landingEntrySpeed ?? plane.speed,
+              landingEntryHeading: entryHeading,
               x: assignedRunway.type === 'helipad' || landing.approachBlend < 0.999
                 ? entry.x + (assignedRunway.startX - entry.x) * landing.approachBlend
                 : assignedRunway.startX + (assignedRunway.endX - assignedRunway.startX) * landing.runwayProgress,
@@ -205,14 +210,16 @@ export function AirTrafficCanvas({
             isHelipad: runway.type === 'helipad',
           }));
           if (runway && authorized) {
+            const incomingHeading = moved.heading;
             return [{
               ...moved,
               isLanding: true,
               landingProgress: 0,
               path: [],
-              heading: runway.heading,
+              heading: incomingHeading,
               landingEntry: { x: moved.x, y: moved.y },
               landingEntrySpeed: moved.speed,
+              landingEntryHeading: incomingHeading,
             }];
           }
           return [moved];
