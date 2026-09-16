@@ -17,6 +17,7 @@ import {
   getApproachEntry,
   isInsideAutoLandingCapture,
 } from '@/lib/approach-routing';
+import { getDriftingCloudShadows } from '@/lib/scenery-effects';
 import * as Haptics from 'expo-haptics';
 
 const coastalAirportScene = require('../assets/images/coastal-airport-scene.jpg');
@@ -57,6 +58,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const animationFrameIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(performance.now());
   const radarSweepAngleRef = useRef<number>(0);
+  const cloudDriftRef = useRef<number>(0);
   const isGameOverRef = useRef<boolean>(false);
   const runwaysRef = useRef<RunwayZone[]>([]);
   const warningBeepCooldownRef = useRef<number>(0);
@@ -430,6 +432,24 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     ctx.bezierCurveTo(w * 0.90, h * 0.85, w * 0.55, h * 0.94, w * 0.25, h * 0.86);
     ctx.bezierCurveTo(w * 0.05, h * 0.70, w * 0.02, h * 0.30, w * 0.10, h * 0.08);
     ctx.fill();
+
+    // Broad, low-opacity cloud shadows drift across the terrain only. They render before
+    // navigation overlays, preserving the bright runway and aircraft contrast needed for play.
+    const cloudShadows = getDriftingCloudShadows(cloudDriftRef.current);
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    cloudShadows.forEach((cloud) => {
+      const x = cloud.x * w;
+      const y = cloud.y * h;
+      const radius = Math.max(w, h) * cloud.radiusScale;
+      const shadow = ctx.createRadialGradient(x, y, radius * 0.12, x, y, radius);
+      shadow.addColorStop(0, `rgba(13, 27, 35, ${cloud.opacity})`);
+      shadow.addColorStop(0.58, `rgba(13, 27, 35, ${cloud.opacity * 0.5})`);
+      shadow.addColorStop(1, 'rgba(13, 27, 35, 0)');
+      ctx.fillStyle = shadow;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    });
+    ctx.restore();
 
     // Sandy coast shoreline border
     ctx.lineWidth = 4;
@@ -898,6 +918,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       lastFrameTimeRef.current = now;
 
       if (!isPaused && !isGameOverRef.current) {
+        cloudDriftRef.current = (cloudDriftRef.current + dt * 0.035) % 1.35;
         // Spawn schedule
         if (shouldSpawnAircraft(now, lastSpawnTimeRef.current, currentLevel.spawnIntervalMs)) {
           spawnAircraft();

@@ -1,4 +1,4 @@
-const CACHE = 'skyline-signal-v1';
+const CACHE = 'skyline-signal-v3';
 const APP_SHELL = ['/', '/manifest.json', '/icons/skyline-180.png', '/icons/skyline-192.png', '/icons/skyline-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -15,6 +15,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() => caches.match('/')));
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();

@@ -7,7 +7,7 @@ import {
   getApproachEntry,
   isInsideAutoLandingCapture,
 } from '../lib/approach-routing';
-import { consumeFixedSteps, getRenderPixelRatio } from '../lib/webgl-frame-pacing';
+import { getDriftingCloudShadows } from '../lib/scenery-effects';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -104,22 +104,22 @@ describe('Assisted runway approach', () => {
   });
 });
 
-describe('WebGL browser frame pacing', () => {
-  it('caps iPhone render density at two physical pixels per CSS pixel', () => {
-    expect(getRenderPixelRatio(3)).toBe(2);
-    expect(getRenderPixelRatio(1)).toBe(1);
-    expect(getRenderPixelRatio(Number.NaN)).toBe(1);
+describe('Scenery cloud shadows', () => {
+  it('keeps cloud shadows subtle and normalized for every mobile board size', () => {
+    const shadows = getDriftingCloudShadows(0.5);
+    expect(shadows).toHaveLength(3);
+    shadows.forEach((shadow) => {
+      expect(shadow.opacity).toBeLessThanOrEqual(0.1);
+      expect(shadow.radiusScale).toBeLessThan(0.3);
+      expect(shadow.y).toBeGreaterThan(0);
+      expect(shadow.y).toBeLessThan(1);
+    });
   });
 
-  it('keeps flight simulation deterministic at sixty steps per second', () => {
-    const result = consumeFixedSteps(0, 1 / 30);
-    expect(result.steps).toBe(2);
-    expect(result.remainder).toBeCloseTo(0, 8);
-  });
-
-  it('caps delayed simulation catch-up to protect browser frame responsiveness', () => {
-    const result = consumeFixedSteps(0, 1);
-    expect(result.steps).toBe(6);
-    expect(result.remainder).toBeLessThanOrEqual(1 / 60);
+  it('moves clouds over time while retaining a finite safe layout', () => {
+    const initial = getDriftingCloudShadows(0);
+    const later = getDriftingCloudShadows(1);
+    expect(later[0].x).not.toBe(initial[0].x);
+    expect(getDriftingCloudShadows(Number.NaN).every((shadow) => Number.isFinite(shadow.x))).toBe(true);
   });
 });

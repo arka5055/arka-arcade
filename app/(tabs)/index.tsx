@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
-import { WebGLFlightRenderer } from '@/components/WebGLFlightRenderer';
+import { AirTrafficCanvas } from '@/components/AirTrafficCanvas';
 import {
   AircraftType,
   AIRCRAFT_DEFS,
@@ -246,7 +246,7 @@ export default function GameScreen() {
 
       {/* Main Touch Radar Field */}
       <View style={styles.canvasContainer}>
-        <WebGLFlightRenderer
+        <AirTrafficCanvas
           key={`canvas-${levelIndex}-${runId}`}
           levelIndex={levelIndex}
           isPaused={isPaused}
