@@ -53,6 +53,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const planesRef = useRef<AircraftInstance[]>([]);
   const selectedPlaneIdRef = useRef<string | null>(null);
   const activeDrawPathRef = useRef<Point[]>([]);
+  const routeStartPointRef = useRef<Point | null>(null);
   // The animation loop passes performance.now(), so the spawn marker must use that same clock.
   const lastSpawnTimeRef = useRef<number>(performance.now());
   const scoreRef = useRef<number>(0);
@@ -676,7 +677,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.strokeStyle = '#ffffff';
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      ctx.moveTo(activeDrawPathRef.current[0].x, activeDrawPathRef.current[0].y);
+      const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
+      const routeOrigin = routeStartPointRef.current ?? selectedPlane ?? activeDrawPathRef.current[0];
+      ctx.moveTo(routeOrigin.x, routeOrigin.y);
       activeDrawPathRef.current.forEach(pt => ctx.lineTo(pt.x, pt.y));
       ctx.stroke();
       ctx.restore();
@@ -985,7 +988,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     if (closestPlane) {
       selectedPlaneIdRef.current = closestPlane.id;
-      activeDrawPathRef.current = [{ x: closestPlane.x, y: closestPlane.y }, { x, y }];
+      // The first press selects the aircraft. It must never be interpreted as a
+      // route point, otherwise a straight drag can briefly command a U-turn.
+      routeStartPointRef.current = { x: closestPlane.x, y: closestPlane.y };
+      activeDrawPathRef.current = [];
       closestPlane.path = [];
       sounds.playSelect();
       if (Platform.OS !== 'web') {
@@ -994,6 +1000,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     } else {
       selectedPlaneIdRef.current = null;
       activeDrawPathRef.current = [];
+      routeStartPointRef.current = null;
     }
   };
 
@@ -1006,7 +1013,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const y = clientY - rect.top;
 
     const path = activeDrawPathRef.current;
-    if (path.length > 0) {
+    if (path.length === 0) {
+      path.push({ x, y });
+    } else {
       const last = path[path.length - 1];
       const dist = Math.sqrt((last.x - x) * (last.x - x) + (last.y - y) * (last.y - y));
       if (dist > 8) {
@@ -1019,7 +1028,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     if (selectedPlaneIdRef.current) {
       const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
       if (plane) {
-        const playerRoute = preservePlayerDrawnRoute(activeDrawPathRef.current);
+        const routeStart = routeStartPointRef.current ?? { x: plane.x, y: plane.y };
+        const playerRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
         if (playerRoute.length > 0) {
           // Player intent wins: retain each point drawn with the finger, without replacing it
           // with an automatic runway approach. Landing capture still validates the final angle.
@@ -1030,6 +1040,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     }
     selectedPlaneIdRef.current = null;
     activeDrawPathRef.current = [];
+    routeStartPointRef.current = null;
   };
 
   const onLayout = (event: LayoutChangeEvent) => {
