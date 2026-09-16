@@ -7,6 +7,7 @@ import {
   getApproachEntry,
   isInsideAutoLandingCapture,
 } from '../lib/approach-routing';
+import { consumeFixedSteps, getRenderPixelRatio } from '../lib/webgl-frame-pacing';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -100,5 +101,25 @@ describe('Assisted runway approach', () => {
   it('recognizes a touch near an active route line for redrawing', () => {
     expect(distanceToLineSegment({ x: 50, y: 8 }, { x: 0, y: 0 }, { x: 100, y: 0 })).toBeCloseTo(8);
     expect(distanceToLineSegment({ x: 50, y: 40 }, { x: 0, y: 0 }, { x: 100, y: 0 })).toBeGreaterThan(26);
+  });
+});
+
+describe('WebGL browser frame pacing', () => {
+  it('caps iPhone render density at two physical pixels per CSS pixel', () => {
+    expect(getRenderPixelRatio(3)).toBe(2);
+    expect(getRenderPixelRatio(1)).toBe(1);
+    expect(getRenderPixelRatio(Number.NaN)).toBe(1);
+  });
+
+  it('keeps flight simulation deterministic at sixty steps per second', () => {
+    const result = consumeFixedSteps(0, 1 / 30);
+    expect(result.steps).toBe(2);
+    expect(result.remainder).toBeCloseTo(0, 8);
+  });
+
+  it('caps delayed simulation catch-up to protect browser frame responsiveness', () => {
+    const result = consumeFixedSteps(0, 1);
+    expect(result.steps).toBe(6);
+    expect(result.remainder).toBeLessThanOrEqual(1 / 60);
   });
 });
