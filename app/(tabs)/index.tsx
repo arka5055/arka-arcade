@@ -191,7 +191,7 @@ export default function GameScreen() {
         <View style={styles.titleGroup}>
           <Text style={styles.appName}>SKYLINE SIGNAL</Text>
           <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {currentLevel.title.toUpperCase()} · {trafficLoad}</Text>
+            <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {trafficLoad} TRAFFIC</Text>
           </View>
         </View>
 
@@ -526,6 +526,8 @@ const styles = StyleSheet.create({
   },
   titleGroup: {
     flexDirection: 'column',
+    flexShrink: 1,
+    minWidth: 0,
   },
   appName: {
     color: '#00E5FF',
@@ -536,6 +538,7 @@ const styles = StyleSheet.create({
   },
   levelBadge: {
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     backgroundColor: 'rgba(0, 229, 255, 0.12)',
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -547,6 +550,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   headerActions: {
     flexDirection: 'row',

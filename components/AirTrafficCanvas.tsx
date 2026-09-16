@@ -752,20 +752,20 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.restore();
     });
 
-    // 4. Draw a subtle permanent destination beam for every aircraft. This creates an
-    // immediate one-to-one association from the aircraft to its exact landing course.
+    // 4. Draw a single high-contrast destination beam for the selected aircraft.
+    // Aircraft tags keep the destination readable before selection without crossing the board.
     planesRef.current.forEach((plane) => {
       if (plane.isLanding) return;
       const destination = getAssignedRunway(plane.type, runwaysRef.current);
       if (!destination) return;
       const approach = getApproachEntry(destination, 86);
       const isSelected = selectedPlaneIdRef.current === plane.id;
+      if (!isSelected) return;
       const color = AIRCRAFT_DEFS[plane.type].color;
-      const guideAlpha = isSelected ? 'B8' : '4A';
       ctx.save();
-      ctx.strokeStyle = `${color}${guideAlpha}`;
-      ctx.lineWidth = isSelected ? 3 : 1.5;
-      ctx.setLineDash(isSelected ? [7, 5] : [3, 10]);
+      ctx.strokeStyle = `${color}C8`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([7, 5]);
       ctx.beginPath();
       ctx.moveTo(plane.x, plane.y);
       ctx.lineTo(approach.x, approach.y);
@@ -773,27 +773,25 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.setLineDash([]);
 
       // A glowing course beacon makes the destination recognisable before the player touches a plane.
-      const pulse = isSelected ? 1 + Math.sin(Date.now() * 0.012) * 0.14 : 1;
+      const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.14;
       ctx.shadowColor = color;
-      ctx.shadowBlur = isSelected ? 12 : 4;
-      ctx.fillStyle = `${color}${isSelected ? 'E8' : '8A'}`;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = `${color}E8`;
       ctx.beginPath();
-      ctx.arc(approach.x, approach.y, (isSelected ? 7 : 4) * pulse, 0, Math.PI * 2);
+      ctx.arc(approach.x, approach.y, 7 * pulse, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-      if (isSelected) {
-        const courseName = destination.id === 'runway-main'
-          ? 'R34'
-          : destination.id === 'runway-diagonal'
-            ? 'R28'
-            : destination.id === 'helipad-h1'
-              ? 'H1'
-              : 'BAY';
-        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText(`LAND ${courseName}`, approach.x, approach.y - 12);
-      }
+      const courseName = destination.id === 'runway-main'
+        ? 'R34'
+        : destination.id === 'runway-diagonal'
+          ? 'R28'
+          : destination.id === 'helipad-h1'
+            ? 'H1'
+            : 'BAY';
+      ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(`LAND ${courseName}`, approach.x, approach.y - 12);
       ctx.restore();
     });
 
@@ -1363,7 +1361,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.save();
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const isSelected = selectedPlaneIdRef.current === p.id;
-      const tagText = isSelected ? `SELECTED · ${routeLabel}` : routeLabel;
+      const tagText = routeLabel;
       const routeWidth = ctx.measureText(tagText).width + 12;
       const tagX = Math.max(routeWidth / 2 + 4, Math.min(w - routeWidth / 2 - 4, p.x));
       const tagY = Math.max(5, Math.min(h - (landing ? 40 : 22), p.y - 35));
