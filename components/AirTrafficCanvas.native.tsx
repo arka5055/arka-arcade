@@ -22,7 +22,11 @@ import {
   Point,
   RunwayZone,
 } from '@/constants/game-types';
-import { getApproachEntry, isInsideAutoLandingCapture } from '@/lib/approach-routing';
+import {
+  buildAssistedRoute,
+  distanceToLineSegment,
+  isInsideAutoLandingCapture,
+} from '@/lib/approach-routing';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -208,7 +212,14 @@ export function AirTrafficCanvas({
     onPanResponderGrant: (event) => {
       if (isPaused || gameOverRef.current) return;
       const point = pointFromEvent(event);
-      const found = planesRef.current.find((plane) => Math.hypot(plane.x - point.x, plane.y - point.y) < 42);
+      let found = planesRef.current.find((plane) => Math.hypot(plane.x - point.x, plane.y - point.y) < 42);
+      if (!found) {
+        found = planesRef.current.find((plane) => {
+          const points = [{ x: plane.x, y: plane.y }, ...plane.path];
+          return points.some((pathPoint, index) => index < points.length - 1
+            && distanceToLineSegment(point, pathPoint, points[index + 1]) < 28);
+        });
+      }
       if (found) {
         selectedRef.current = found.id;
         setSelectedId(found.id);
@@ -222,13 +233,14 @@ export function AirTrafficCanvas({
     onPanResponderRelease: (event) => {
       const id = selectedRef.current;
       if (id) {
+        const drawnPoint = pointFromEvent(event);
         setPlanes((previous) => previous.map((plane) => {
           if (plane.id !== id) return plane;
           const runway = runways.find((item) => item.allowedTypes.includes(plane.type));
           if (!runway) return plane;
           return {
             ...plane,
-            path: [getApproachEntry(runway), { x: runway.startX, y: runway.startY }],
+            path: buildAssistedRoute(plane, drawnPoint, runway),
           };
         }));
       }

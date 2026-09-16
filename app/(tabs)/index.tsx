@@ -366,7 +366,7 @@ export default function GameScreen() {
             <Text style={styles.dialogTitle}>CONTROLLER BRIEFING</Text>
             <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
               <Text style={styles.infoParagraph}>
-                👉 <Text style={styles.bold}>Drag to Clear:</Text> Touch any aircraft and drag in any direction. The correct runway glows, then the game creates a smooth automatic final approach when you release.
+                👉 <Text style={styles.bold}>Drag to Clear or Change:</Text> Touch any aircraft—or its dashed route line—and drag to a new point. The correct runway glows, then the game creates a smooth automatic final approach when you release.
               </Text>
               <Text style={styles.infoParagraph}>
                 🛬 <Text style={styles.bold}>Match Corridors:</Text>

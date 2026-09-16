@@ -11,7 +11,12 @@ import {
 } from '@/constants/game-types';
 import { sounds } from '@/lib/sound-controller';
 import { shouldSpawnAircraft } from '@/lib/game-timing';
-import { getApproachEntry, isInsideAutoLandingCapture } from '@/lib/approach-routing';
+import {
+  buildAssistedRoute,
+  distanceToLineSegment,
+  getApproachEntry,
+  isInsideAutoLandingCapture,
+} from '@/lib/approach-routing';
 import * as Haptics from 'expo-haptics';
 
 const coastalAirportScene = require('../assets/images/coastal-airport-scene.jpg');
@@ -925,7 +930,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    // Find closest aircraft within touch radius (36px)
+    // Find closest aircraft within touch radius, or select its existing route line.
     let closestPlane: AircraftInstance | null = null;
     let minDist = 38;
 
@@ -935,6 +940,25 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       if (d < minDist) {
         minDist = d;
         closestPlane = plane;
+      }
+    }
+
+    if (!closestPlane) {
+      for (const plane of planesRef.current) {
+        if (plane.isLanding || plane.landed || plane.path.length === 0) continue;
+        const pathPoints = [{ x: plane.x, y: plane.y }, ...plane.path];
+        for (let pathIndex = 0; pathIndex < pathPoints.length - 1; pathIndex += 1) {
+          const lineDistance = distanceToLineSegment(
+            { x, y },
+            pathPoints[pathIndex],
+            pathPoints[pathIndex + 1],
+          );
+          if (lineDistance < 26) {
+            closestPlane = plane;
+            break;
+          }
+        }
+        if (closestPlane) break;
       }
     }
 
@@ -978,10 +1002,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         if (matchingRunway) {
           // The player grants the clearance; the game supplies a generous final approach.
           // This removes the brittle need to draw a pixel-perfect path to a tiny target.
-          plane.path = [
-            getApproachEntry(matchingRunway),
-            { x: matchingRunway.startX, y: matchingRunway.startY },
-          ];
+          const drawnPoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+          plane.path = buildAssistedRoute(plane, drawnPoint, matchingRunway);
           sounds.playSelect();
         }
       }

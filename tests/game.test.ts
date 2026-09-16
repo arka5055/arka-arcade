@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { AIRCRAFT_DEFS, LEVELS, AircraftType } from '../constants/game-types';
 import { shouldSpawnAircraft } from '../lib/game-timing';
-import { getApproachEntry, isInsideAutoLandingCapture } from '../lib/approach-routing';
+import {
+  buildAssistedRoute,
+  distanceToLineSegment,
+  getApproachEntry,
+  isInsideAutoLandingCapture,
+} from '../lib/approach-routing';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -83,5 +88,17 @@ describe('Assisted runway approach', () => {
   it('uses a generous landing capture zone to avoid precision circling', () => {
     expect(isInsideAutoLandingCapture({ x: 200, y: 270 }, runway)).toBe(true);
     expect(isInsideAutoLandingCapture({ x: 200, y: 300 }, runway)).toBe(false);
+  });
+
+  it('keeps a newly drawn steering point before the safe final approach', () => {
+    const route = buildAssistedRoute({ x: 50, y: 50 }, { x: 100, y: 150 }, runway);
+    expect(route).toHaveLength(3);
+    expect(route[0]).toEqual({ x: 100, y: 150 });
+    expect(route[2]).toEqual({ x: runway.startX, y: runway.startY });
+  });
+
+  it('recognizes a touch near an active route line for redrawing', () => {
+    expect(distanceToLineSegment({ x: 50, y: 8 }, { x: 0, y: 0 }, { x: 100, y: 0 })).toBeCloseTo(8);
+    expect(distanceToLineSegment({ x: 50, y: 40 }, { x: 0, y: 0 }, { x: 100, y: 0 })).toBeGreaterThan(26);
   });
 });

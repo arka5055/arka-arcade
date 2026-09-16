@@ -16,3 +16,32 @@ export function isInsideAutoLandingCapture(point: Point, runway: RunwayZone): bo
   return Math.hypot(point.x - runway.startX, point.y - runway.startY)
     <= runway.touchdownRadius + 42;
 }
+
+/**
+ * Build a route that honours the player's new steering line, then smoothly joins
+ * the runway's safe, assisted final approach.
+ */
+export function buildAssistedRoute(
+  aircraft: Point,
+  drawnPoint: Point,
+  runway: RunwayZone,
+): Point[] {
+  const finalEntry = getApproachEntry(runway);
+  const steeringDistance = Math.hypot(drawnPoint.x - aircraft.x, drawnPoint.y - aircraft.y);
+  const shouldUseManualWaypoint = steeringDistance >= 34;
+
+  return shouldUseManualWaypoint
+    ? [drawnPoint, finalEntry, { x: runway.startX, y: runway.startY }]
+    : [finalEntry, { x: runway.startX, y: runway.startY }];
+}
+
+/** Supports selecting an active drawn path, not only the small moving plane itself. */
+export function distanceToLineSegment(point: Point, start: Point, end: Point): number {
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (segmentLengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / segmentLengthSquared));
+  return Math.hypot(point.x - (start.x + segmentX * t), point.y - (start.y + segmentY * t));
+}
