@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
+import { Image, LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -22,6 +22,7 @@ import {
   Point,
   RunwayZone,
 } from '@/constants/game-types';
+import { getApproachEntry, isInsideAutoLandingCapture } from '@/lib/approach-routing';
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -169,11 +170,11 @@ export function AirTrafficCanvas({
             targetHeading,
             x: plane.x + Math.cos(heading) * speed * 0.06,
             y: plane.y + Math.sin(heading) * speed * 0.06,
-            path: target && Math.hypot(target.x - plane.x, target.y - plane.y) < 12 ? [] : plane.path,
+            path: target && Math.hypot(target.x - plane.x, target.y - plane.y) < 24 ? plane.path.slice(1) : plane.path,
           };
 
           const runway = runways.find((item) => item.allowedTypes.includes(moved.type));
-          if (runway && moved.path.length > 0 && Math.hypot(moved.x - runway.startX, moved.y - runway.startY) < runway.touchdownRadius) {
+          if (runway && plane.path.length > 0 && isInsideAutoLandingCapture(moved, runway)) {
             return [{ ...moved, isLanding: true, landingProgress: 0, path: [], heading: runway.heading }];
           }
           return [moved];
@@ -221,8 +222,15 @@ export function AirTrafficCanvas({
     onPanResponderRelease: (event) => {
       const id = selectedRef.current;
       if (id) {
-        const point = pointFromEvent(event);
-        setPlanes((previous) => previous.map((plane) => plane.id === id ? { ...plane, path: [point] } : plane));
+        setPlanes((previous) => previous.map((plane) => {
+          if (plane.id !== id) return plane;
+          const runway = runways.find((item) => item.allowedTypes.includes(plane.type));
+          if (!runway) return plane;
+          return {
+            ...plane,
+            path: [getApproachEntry(runway), { x: runway.startX, y: runway.startY }],
+          };
+        }));
       }
       selectedRef.current = null;
       setSelectedId(null);
@@ -233,7 +241,7 @@ export function AirTrafficCanvas({
       setSelectedId(null);
       setDraftPoint(null);
     },
-  }), [isPaused]);
+  }), [isPaused, runways]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -242,6 +250,11 @@ export function AirTrafficCanvas({
 
   return (
     <View style={styles.container} onLayout={onLayout} {...panResponder.panHandlers}>
+      <Image
+        source={require('../assets/images/coastal-airport-scene.jpg')}
+        resizeMode="cover"
+        style={styles.scenery}
+      />
       <Svg width={bounds.width} height={bounds.height}>
         <Defs>
           <LinearGradient id="ocean" x1="0" y1="0" x2="1" y2="1">
@@ -254,7 +267,7 @@ export function AirTrafficCanvas({
             <Stop offset="1" stopColor="#102d28" />
           </LinearGradient>
         </Defs>
-        <Rect width={bounds.width} height={bounds.height} fill="url(#ocean)" />
+        <Rect width={bounds.width} height={bounds.height} fill="url(#ocean)" fillOpacity={0.62} />
         <Path
           d={`M ${bounds.width * 0.1} ${bounds.height * 0.08} C ${bounds.width * 0.65} ${bounds.height * 0.02}, ${bounds.width * 0.95} ${bounds.height * 0.2}, ${bounds.width * 0.92} ${bounds.height * 0.5} C ${bounds.width * 0.9} ${bounds.height * 0.85}, ${bounds.width * 0.55} ${bounds.height * 0.94}, ${bounds.width * 0.25} ${bounds.height * 0.86} C ${bounds.width * 0.05} ${bounds.height * 0.7}, ${bounds.width * 0.02} ${bounds.height * 0.3}, ${bounds.width * 0.1} ${bounds.height * 0.08}`}
           fill="url(#land)" stroke="#56d49d" strokeOpacity={0.6} strokeWidth={3}
@@ -339,5 +352,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1.5,
     borderColor: 'rgba(0, 229, 255, 0.30)',
+  },
+  scenery: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.42,
   },
 });

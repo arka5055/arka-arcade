@@ -366,7 +366,7 @@ export default function GameScreen() {
             <Text style={styles.dialogTitle}>CONTROLLER BRIEFING</Text>
             <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
               <Text style={styles.infoParagraph}>
-                👉 <Text style={styles.bold}>Drag to Route:</Text> Touch and drag directly from any aircraft to sketch its flight approach path.
+                👉 <Text style={styles.bold}>Drag to Clear:</Text> Touch any aircraft and drag in any direction. The correct runway glows, then the game creates a smooth automatic final approach when you release.
               </Text>
               <Text style={styles.infoParagraph}>
                 🛬 <Text style={styles.bold}>Match Corridors:</Text>
@@ -480,12 +480,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#030c14',
     paddingHorizontal: 10,
     paddingBottom: 6,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderColor: 'rgba(0, 229, 255, 0.15)',
   },
@@ -520,8 +523,12 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    minWidth: 36,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
@@ -539,7 +546,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#081726',
     marginVertical: 8,
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
@@ -623,7 +630,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: '#061a29',
     borderRadius: 10,
     borderWidth: 1,

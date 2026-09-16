@@ -11,7 +11,10 @@ import {
 } from '@/constants/game-types';
 import { sounds } from '@/lib/sound-controller';
 import { shouldSpawnAircraft } from '@/lib/game-timing';
+import { getApproachEntry, isInsideAutoLandingCapture } from '@/lib/approach-routing';
 import * as Haptics from 'expo-haptics';
+
+const coastalAirportScene = require('../assets/images/coastal-airport-scene.jpg');
 
 interface AirTrafficCanvasProps {
   levelIndex: number;
@@ -52,9 +55,20 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const isGameOverRef = useRef<boolean>(false);
   const runwaysRef = useRef<RunwayZone[]>([]);
   const warningBeepCooldownRef = useRef<number>(0);
+  const sceneryImageRef = useRef<HTMLImageElement | null>(null);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
+
+  useEffect(() => {
+    const image = new Image();
+    image.src = typeof coastalAirportScene === 'string'
+      ? coastalAirportScene
+      : coastalAirportScene?.uri;
+    image.onload = () => {
+      sceneryImageRef.current = image;
+    };
+  }, []);
 
   // Initialize Runways based on dimensions
   const updateRunwayCoordinates = useCallback((w: number, h: number) => {
@@ -287,7 +301,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const dy = nextPoint.y - p.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 10) {
+        if (dist < 24) {
           p.path.shift(); // Reached waypoint
         } else {
           p.targetHeading = Math.atan2(dy, dx);
@@ -315,12 +329,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       for (const runway of runways) {
         if (!runway.allowedTypes.includes(p.type)) continue;
 
-        const gateDist = Math.sqrt(
-          (p.x - runway.startX) * (p.x - runway.startX) +
-          (p.y - runway.startY) * (p.y - runway.startY)
-        );
-
-        if (gateDist < runway.touchdownRadius) {
+        if (isInsideAutoLandingCapture(p, runway)) {
           // Check approach angle
           let angleDiff = Math.abs(p.heading - runway.heading);
           while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
@@ -367,6 +376,31 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     waterGrad.addColorStop(1, '#061a2a');
     ctx.fillStyle = waterGrad;
     ctx.fillRect(0, 0, w, h);
+
+    // Photorealistic island scenery sits beneath the tactical overlays at a soft opacity.
+    // The deliberate darkening keeps game routes more legible than the photograph itself.
+    if (sceneryImageRef.current?.complete) {
+      const image = sceneryImageRef.current;
+      const imageRatio = image.width / image.height;
+      const boardRatio = w / h;
+      let drawWidth = w;
+      let drawHeight = h;
+      let drawX = 0;
+      let drawY = 0;
+      if (imageRatio > boardRatio) {
+        drawWidth = h * imageRatio;
+        drawX = (w - drawWidth) / 2;
+      } else {
+        drawHeight = w / imageRatio;
+        drawY = (h - drawHeight) / 2;
+      }
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+      ctx.fillStyle = 'rgba(3, 15, 24, 0.38)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
 
     // Fine ocean-current lines add depth without competing with the aircraft.
     ctx.save();
@@ -447,11 +481,14 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     // 3. Draw runways, bright approach gates and unambiguous destination labels.
     runwaysRef.current.forEach(runway => {
+      const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
+      const isSuggestedRunway = Boolean(selectedPlane && runway.allowedTypes.includes(selectedPlane.type));
+      const approachEntry = getApproachEntry(runway);
       // Runway asphalt strip
       ctx.save();
       ctx.shadowColor = runway.color;
-      ctx.shadowBlur = 10;
-      ctx.lineWidth = runway.type === 'water' ? 30 : 28;
+      ctx.shadowBlur = isSuggestedRunway ? 22 : 10;
+      ctx.lineWidth = runway.type === 'water' ? (isSuggestedRunway ? 36 : 30) : (isSuggestedRunway ? 34 : 28);
       ctx.lineCap = 'round';
       ctx.strokeStyle = runway.type === 'water' ? 'rgba(0, 100, 85, 0.72)' : '#121923';
       ctx.beginPath();
@@ -529,6 +566,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.fillText(runwayLabel, runway.startX, runway.startY - 30);
+      if (isSuggestedRunway) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(approachEntry.x, approachEntry.y);
+        ctx.lineTo(runway.startX, runway.startY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(approachEntry.x, approachEntry.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 10px -apple-system, system-ui, sans-serif';
+        ctx.fillText('AUTO APPROACH', approachEntry.x, approachEntry.y - 10);
+      }
       ctx.restore();
     });
 
@@ -919,8 +973,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const handlePointerUp = () => {
     if (selectedPlaneIdRef.current) {
       const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
-      if (plane && activeDrawPathRef.current.length > 1) {
-        plane.path = [...activeDrawPathRef.current];
+      if (plane) {
+        const matchingRunway = runwaysRef.current.find((runway) => runway.allowedTypes.includes(plane.type));
+        if (matchingRunway) {
+          // The player grants the clearance; the game supplies a generous final approach.
+          // This removes the brittle need to draw a pixel-perfect path to a tiny target.
+          plane.path = [
+            getApproachEntry(matchingRunway),
+            { x: matchingRunway.startX, y: matchingRunway.startY },
+          ];
+          sounds.playSelect();
+        }
       }
     }
     selectedPlaneIdRef.current = null;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AIRCRAFT_DEFS, LEVELS, AircraftType } from '../constants/game-types';
 import { shouldSpawnAircraft } from '../lib/game-timing';
+import { getApproachEntry, isInsideAutoLandingCapture } from '../lib/approach-routing';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -54,5 +55,33 @@ describe('Spawn scheduler', () => {
 
   it('works with animation-clock values rather than wall-clock epoch values', () => {
     expect(shouldSpawnAircraft(18_100, 9_000, 9_000)).toBe(true);
+  });
+});
+
+describe('Assisted runway approach', () => {
+  const runway = {
+    id: 'test-runway',
+    name: 'Test',
+    startX: 200,
+    startY: 200,
+    endX: 200,
+    endY: 500,
+    allowedTypes: ['jet'] as AircraftType[],
+    heading: Math.PI / 2,
+    headingTolerance: 0.8,
+    touchdownRadius: 36,
+    color: '#00E5FF',
+    type: 'runway' as const,
+  };
+
+  it('places the approach entry behind the threshold on the runway centreline', () => {
+    const entry = getApproachEntry(runway, 120);
+    expect(entry.x).toBeCloseTo(200, 5);
+    expect(entry.y).toBeCloseTo(80, 5);
+  });
+
+  it('uses a generous landing capture zone to avoid precision circling', () => {
+    expect(isInsideAutoLandingCapture({ x: 200, y: 270 }, runway)).toBe(true);
+    expect(isInsideAutoLandingCapture({ x: 200, y: 300 }, runway)).toBe(false);
   });
 });
