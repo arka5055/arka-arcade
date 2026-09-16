@@ -71,6 +71,30 @@ in vec2 v_uv;
 uniform sampler2D u_scene;
 uniform float u_time;
 out vec4 outColor;
+float cloudHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float cloudNoise(vec2 p) {
+  vec2 cell = floor(p);
+  vec2 local = fract(p);
+  local = local * local * (3.0 - 2.0 * local);
+  return mix(
+    mix(cloudHash(cell), cloudHash(cell + vec2(1.0, 0.0)), local.x),
+    mix(cloudHash(cell + vec2(0.0, 1.0)), cloudHash(cell + vec2(1.0, 1.0)), local.x),
+    local.y
+  );
+}
+float cloudField(vec2 p) {
+  float layer = 0.0;
+  layer += cloudNoise(p) * 0.52;
+  p = p * 2.03 + vec2(17.0, 9.0);
+  layer += cloudNoise(p) * 0.26;
+  p = p * 2.01 + vec2(8.0, 31.0);
+  layer += cloudNoise(p) * 0.13;
+  p = p * 2.02 + vec2(41.0, 5.0);
+  layer += cloudNoise(p) * 0.07;
+  return layer;
+}
 void main() {
   vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
   vec3 airport = texture(u_scene, uv).rgb;
@@ -78,6 +102,11 @@ void main() {
   vec3 ocean = vec3(0.02, 0.14 + ripple, 0.19 + ripple);
   float vignette = smoothstep(1.0, 0.12, length(v_uv - 0.5));
   vec3 color = mix(ocean, airport, 0.50) * (0.72 + vignette * 0.28);
+  vec2 cloudDrift = uv * vec2(2.10, 2.85) + vec2(u_time * 0.0065, -u_time * 0.0042);
+  float broadClouds = smoothstep(0.58, 0.77, cloudField(cloudDrift));
+  float highClouds = smoothstep(0.64, 0.80, cloudField(cloudDrift * 1.72 + vec2(12.0, 4.0)));
+  float shadow = broadClouds * 0.18 + highClouds * 0.08;
+  color *= 1.0 - shadow;
   outColor = vec4(color, 1.0);
 }`;
 
