@@ -344,6 +344,28 @@ describe('Assisted runway approach', () => {
     expect(valid.endpointDistance).toBeLessThanOrEqual(valid.captureRadius);
   });
 
+  it('keeps a finger-drawn approach locked despite a small final touch wiggle', () => {
+    const valid = validateLandingRoute(
+      { x: 200, y: 40 },
+      [{ x: 200, y: 110 }, { x: 200, y: 180 }, { x: 205, y: 183 }],
+      runway,
+    );
+    expect(valid.isInsideCapture).toBe(true);
+    expect(valid.isHeadingAligned).toBe(true);
+    expect(valid.isOnApproachSide).toBe(true);
+    expect(valid.isLocked).toBe(true);
+  });
+
+  it('allows a forgiving endpoint just beyond the threshold without accepting a runway overshoot', () => {
+    const forgiving = validateLandingRoute(
+      { x: 200, y: 40 },
+      [{ x: 200, y: 120 }, { x: 200, y: 212 }],
+      runway,
+    );
+    expect(forgiving.thresholdProjection).toBe(12);
+    expect(forgiving.isLocked).toBe(true);
+  });
+
   it('does not lock a route that reaches the runway with the wrong final direction', () => {
     const invalid = validateLandingRoute(
       { x: 120, y: 200 },

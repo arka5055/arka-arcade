@@ -602,6 +602,34 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     ctx.fill();
     ctx.restore();
 
+    // Incoming-flight edge dots: before a plane is selectable, show the color and direction
+    // of the aircraft about to enter the sector. This keeps the original game's anticipatory
+    // radar feel without drawing an automatic route across the board.
+    planesRef.current.forEach((plane) => {
+      if (plane.isLanding || plane.landed) return;
+      const isNearEdge = plane.x < 34 || plane.x > w - 34 || plane.y < 34 || plane.y > h - 34;
+      if (!isNearEdge) return;
+      const color = AIRCRAFT_DEFS[plane.type].color;
+      const startX = Math.max(7, Math.min(w - 7, plane.x));
+      const startY = Math.max(7, Math.min(h - 7, plane.y));
+      const directionX = Math.cos(plane.heading);
+      const directionY = Math.sin(plane.heading);
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      for (let dot = 0; dot < 5; dot += 1) {
+        const dotX = startX + directionX * dot * 9;
+        const dotY = startY + directionY * dot * 9;
+        if (dotX < 4 || dotX > w - 4 || dotY < 4 || dotY > h - 4) continue;
+        ctx.globalAlpha = 0.32 + dot * 0.13;
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 2.5 + dot * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
     // 3. Draw runways, bright approach gates and unambiguous destination labels.
     runwaysRef.current.forEach(runway => {
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
@@ -910,12 +938,45 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     if (isEditingRouteRef.current && activeDrawPathRef.current.length > 0) {
       ctx.save();
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
-      const isLandingLocked = draftLandingClearedRef.current;
+      const selectedRunway = selectedPlane && getAssignedRunway(selectedPlane.type, runwaysRef.current);
+      const routeOrigin = routeStartPointRef.current ?? selectedPlane ?? activeDrawPathRef.current[0];
+      const draftRoute = selectedPlane && routeOrigin && selectedRunway
+        ? preservePlayerDrawnRoute(routeOrigin, activeDrawPathRef.current)
+        : [];
+      const landingValidation = selectedPlane && routeOrigin && selectedRunway
+        ? validateLandingRoute(routeOrigin, draftRoute, selectedRunway)
+        : null;
+      const isLandingLocked = Boolean(landingValidation?.isLocked);
+
+      // The green capture window is deliberately large and only appears while the player is
+      // drawing. It explains exactly where a valid route should end without altering the route.
+      if (selectedRunway && landingValidation) {
+        const isHelipad = selectedRunway.type === 'helipad';
+        const guideColor = isLandingLocked ? '#00E676' : selectedRunway.color;
+        const approachEntry = getApproachEntry(selectedRunway, Math.min(104, landingValidation.captureRadius + 14));
+        const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
+        ctx.save();
+        ctx.strokeStyle = guideColor;
+        ctx.fillStyle = `${guideColor}18`;
+        ctx.lineWidth = isLandingLocked ? 3 : 2;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.arc(selectedRunway.startX, selectedRunway.startY, landingValidation.captureRadius * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        if (!isHelipad) {
+          ctx.beginPath();
+          ctx.moveTo(approachEntry.x, approachEntry.y);
+          ctx.lineTo(selectedRunway.startX, selectedRunway.startY);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
       ctx.lineWidth = isLandingLocked ? 4 : 3.5;
       ctx.strokeStyle = isLandingLocked ? '#00E676' : '#ffffff';
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      const routeOrigin = routeStartPointRef.current ?? selectedPlane ?? activeDrawPathRef.current[0];
       ctx.moveTo(routeOrigin.x, routeOrigin.y);
       activeDrawPathRef.current.forEach(pt => ctx.lineTo(pt.x, pt.y));
       ctx.stroke();
@@ -943,23 +1004,29 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.fillText(lockText, endpoint.x, endpoint.y - 19);
       } else {
         const endpoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
-        const runway = selectedPlane && getAssignedRunway(selectedPlane.type, runwaysRef.current);
-        if (runway) {
-          const target = runway.id === 'runway-main' ? 'R34'
-            : runway.id === 'runway-diagonal' ? 'R28'
-              : runway.id === 'helipad-h1' ? 'H1' : 'BAY';
+        if (selectedRunway && landingValidation) {
+          const target = selectedRunway.id === 'runway-main' ? 'R34'
+            : selectedRunway.id === 'runway-diagonal' ? 'R28'
+              : selectedRunway.id === 'helipad-h1' ? 'H1' : 'BAY';
+          const hint = !landingValidation.isInsideCapture
+            ? `ENTER ${target} ZONE`
+            : !landingValidation.isOnApproachSide
+              ? 'STOP BEFORE THRESHOLD'
+              : !landingValidation.isHeadingAligned
+                ? 'ALIGN WITH DASHED GUIDE'
+                : `DRAW TO ${target}`;
           ctx.setLineDash([]);
           ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
           ctx.font = '800 9px -apple-system, system-ui, sans-serif';
-          const hint = `DRAW TO ${target} THRESHOLD`;
           const hintWidth = ctx.measureText(hint).width + 12;
-          ctx.fillRect(endpoint.x - hintWidth / 2, endpoint.y - 29, hintWidth, 15);
-          ctx.strokeStyle = runway.color;
+          const hintPosition = clampRadarLabel(endpoint.x, endpoint.y - 29, hintWidth, w, h, 15);
+          ctx.fillRect(hintPosition.x - hintWidth / 2, hintPosition.y, hintWidth, 15);
+          ctx.strokeStyle = selectedRunway.color;
           ctx.lineWidth = 1;
-          ctx.strokeRect(endpoint.x - hintWidth / 2, endpoint.y - 29, hintWidth, 15);
+          ctx.strokeRect(hintPosition.x - hintWidth / 2, hintPosition.y, hintWidth, 15);
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
-          ctx.fillText(hint, endpoint.x, endpoint.y - 18);
+          ctx.fillText(hint, hintPosition.x, hintPosition.y + 11);
         }
       }
       ctx.restore();
