@@ -28,7 +28,7 @@ import {
   restoreRouteSnapshot,
 } from '../lib/route-editing';
 import { canSpawnInSector, getActiveAircraftBudget } from '../lib/traffic-director';
-import { clampRadarLabel } from '../lib/radar-ui';
+import { clampRadarLabel, shouldShowFlightTag } from '../lib/radar-ui';
 
 describe('Aircraft Definitions', () => {
   it('defines valid specifications for each aircraft class', () => {
@@ -128,6 +128,13 @@ describe('Radar label placement', () => {
       expect(position.y).toBeGreaterThanOrEqual(5);
       expect(position.y + labelHeight).toBeLessThanOrEqual(height - 5);
     });
+  });
+
+  it('keeps flight tags out of the central control area unless the aircraft needs attention', () => {
+    expect(shouldShowFlightTag({ isSelected: false, isNearEdge: false, isLanding: false })).toBe(false);
+    expect(shouldShowFlightTag({ isSelected: true, isNearEdge: false, isLanding: false })).toBe(true);
+    expect(shouldShowFlightTag({ isSelected: false, isNearEdge: true, isLanding: false })).toBe(true);
+    expect(shouldShowFlightTag({ isSelected: false, isNearEdge: false, isLanding: true })).toBe(true);
   });
 });
 

@@ -31,7 +31,7 @@ import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-autho
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
 import { blendLandingHeading, isForwardAlongRunway } from '@/lib/landing-motion';
 import { canSpawnInSector } from '@/lib/traffic-director';
-import { clampRadarLabel } from '@/lib/radar-ui';
+import { clampRadarLabel, shouldShowFlightTag } from '@/lib/radar-ui';
 import {
   cloneRouteSnapshot,
   hasRouteEditIntent,
@@ -519,10 +519,12 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     }
     ctx.restore();
 
-    // Island landmass polygon
+    // Island landmass keeps the real landscape visible rather than covering it with a flat map layer.
     const islandGrad = ctx.createLinearGradient(w * 0.1, h * 0.1, w * 0.9, h * 0.9);
     islandGrad.addColorStop(0, '#244e3f');
     islandGrad.addColorStop(1, stageEnvironment.terrainTint);
+    ctx.save();
+    ctx.globalAlpha = 0.72;
     ctx.fillStyle = islandGrad;
     ctx.beginPath();
     ctx.moveTo(w * 0.10, h * 0.08);
@@ -530,6 +532,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     ctx.bezierCurveTo(w * 0.90, h * 0.85, w * 0.55, h * 0.94, w * 0.25, h * 0.86);
     ctx.bezierCurveTo(w * 0.05, h * 0.70, w * 0.02, h * 0.30, w * 0.10, h * 0.08);
     ctx.fill();
+    ctx.restore();
 
     // Broad, low-opacity cloud shadows drift across the terrain only. They render before
     // navigation overlays, preserving the bright runway and aircraft contrast needed for play.
@@ -551,7 +554,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     // Sandy coast shoreline border
     ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(86, 212, 157, 0.58)';
+    ctx.strokeStyle = 'rgba(115, 234, 184, 0.72)';
     ctx.stroke();
 
     // Terminal apron and taxiway grid give the airport a more recognizable place.
@@ -560,7 +563,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const apronY = h * 0.38;
     const apronW = w * 0.27;
     const apronH = h * 0.30;
-    ctx.fillStyle = 'rgba(33, 45, 57, 0.92)';
+    ctx.fillStyle = 'rgba(10, 26, 37, 0.74)';
     ctx.fillRect(apronX, apronY, apronW, apronH);
     ctx.strokeStyle = 'rgba(255, 190, 70, 0.5)';
     ctx.lineWidth = 1;
@@ -580,7 +583,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const cx = w * 0.5;
     const cy = h * 0.48;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.12)';
+    ctx.strokeStyle = 'rgba(97, 218, 236, 0.08)';
     for (let r = 50; r <= Math.max(w, h); r += 65) {
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -845,6 +848,36 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           ctx.beginPath();
           ctx.arc(endPt.x, endPt.y, 11, 0, Math.PI * 2);
           ctx.stroke();
+
+          // A small traveling marker makes the direction of a cleared plan instantly obvious
+          // without redrawing, smoothing, or otherwise changing the player's route.
+          const routePoints = [{ x: p.x, y: p.y }, ...p.path];
+          const segmentLengths = routePoints.slice(1).map((point, index) => Math.hypot(
+            point.x - routePoints[index].x,
+            point.y - routePoints[index].y,
+          ));
+          const totalLength = segmentLengths.reduce((sum, length) => sum + length, 0);
+          let remainingLength = totalLength * ((Date.now() % 1400) / 1400);
+          for (let index = 0; index < segmentLengths.length; index += 1) {
+            const segmentLength = segmentLengths[index];
+            if (remainingLength > segmentLength) {
+              remainingLength -= segmentLength;
+              continue;
+            }
+            const start = routePoints[index];
+            const end = routePoints[index + 1];
+            const progress = segmentLength > 0 ? remainingLength / segmentLength : 0;
+            const markerX = start.x + (end.x - start.x) * progress;
+            const markerY = start.y + (end.y - start.y) * progress;
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#00E676';
+            ctx.shadowBlur = 9;
+            ctx.beginPath();
+            ctx.arc(markerX, markerY, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            break;
+          }
         }
         ctx.restore();
       }
@@ -1401,18 +1434,28 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       // Selected ring
       if (selectedPlaneIdRef.current === p.id) {
-        ctx.lineWidth = 2;
+        const selectionPulse = 1 + Math.sin(Date.now() * 0.012) * 0.09;
+        ctx.shadowColor = def.color;
+        ctx.shadowBlur = 13;
+        ctx.lineWidth = 2.6;
         ctx.strokeStyle = '#ffffff';
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.arc(0, 0, 27 * selectionPulse, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = def.color;
+        ctx.beginPath();
+        ctx.arc(0, -32, 3.2, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       ctx.restore();
 
-      // High contrast callsign chip: the route is readable without relying on colour.
+      // Keep the board calm: aircraft colour identifies the destination at a glance, and the
+      // full text chip appears only for the selected flight or an aircraft nearing the edge.
+      // This leaves the player-drawn line as the dominant visual object during routing.
       const routeLabel = p.type === 'jet'
         ? 'JET → R34'
         : p.type === 'supersonic'
@@ -1425,6 +1468,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.save();
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const isSelected = selectedPlaneIdRef.current === p.id;
+      const isNearEdge = p.x < 32 || p.x > w - 32 || p.y < 40 || p.y > h - 30;
+      if (!shouldShowFlightTag({ isSelected, isNearEdge, isLanding: Boolean(landing) })) {
+        ctx.restore();
+        return;
+      }
       const tagText = routeLabel;
       const routeWidth = ctx.measureText(tagText).width + 12;
       const tagPosition = clampRadarLabel(

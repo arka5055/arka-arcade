@@ -25,3 +25,19 @@ export function clampRadarLabel(
     y: Math.max(minY, Math.min(maxY, desiredY)),
   };
 }
+
+/**
+ * Keeps destination text available at the moments it helps a controller most, while
+ * avoiding a dense wall of labels over the middle of the radar during active play.
+ */
+export function shouldShowFlightTag({
+  isSelected,
+  isNearEdge,
+  isLanding,
+}: {
+  isSelected: boolean;
+  isNearEdge: boolean;
+  isLanding: boolean;
+}): boolean {
+  return isSelected || isNearEdge || isLanding;
+}
