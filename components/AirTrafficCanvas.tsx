@@ -8,6 +8,8 @@ import {
   Point,
   LEVELS,
   GameLevel,
+  isVerticalDestination,
+  isVerticalAircraft,
 } from '@/constants/game-types';
 import { sounds } from '@/lib/sound-controller';
 import { shouldSpawnAircraft } from '@/lib/game-timing';
@@ -39,6 +41,15 @@ import {
   type RouteSnapshot,
 } from '@/lib/route-editing';
 import { RELEASE_LABEL } from '@/constants/release';
+import { getCanvasPixelRatio, getVisualQuality } from '@/lib/render-quality';
+import {
+  getCrosswindVector,
+  getFuelBand,
+  getMissionHazards,
+  getMissionPresentation,
+  isInsideMissionHazard,
+  routeIntersectsMissionHazard,
+} from '@/lib/mission-system';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -99,10 +110,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const crashReportedRef = useRef(false);
   const activeConflictsRef = useRef<TrafficConflict[]>([]);
   const sectorCompleteRef = useRef(false);
+  const missionElapsedRef = useRef(0);
+  const missionWarningCooldownRef = useRef(0);
+  const missionFailureReportedRef = useRef(false);
+  const draftHazardViolationRef = useRef(false);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
-  const stageEnvironment = getStageEnvironment(levelIndex);
+  const stageEnvironment = getStageEnvironment(currentLevel.environmentIndex);
+  const missionPresentation = getMissionPresentation(currentLevel);
 
   useEffect(() => {
     sceneryImageRef.current = null;
@@ -115,15 +131,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
   // Initialize Runways based on dimensions
   const updateRunwayCoordinates = useCallback((w: number, h: number) => {
+    const layout = currentLevel.mapLayout;
+    const mainX = layout === 'ridge' ? w * 0.66 : layout === 'delta' ? w * 0.54 : w * 0.58;
+    const diagonalStartX = layout === 'ridge' ? w * 0.14 : w * 0.22;
+    const diagonalStartY = layout === 'delta' ? h * 0.31 : h * 0.24;
+    const diagonalEndX = layout === 'coastal' ? w * 0.86 : w * 0.82;
+    const diagonalEndY = layout === 'ridge' ? h * 0.68 : h * 0.62;
+    const helipadX = layout === 'delta' ? w * 0.25 : layout === 'ridge' ? w * 0.20 : w * 0.25;
+    const helipadY = layout === 'ridge' ? h * 0.61 : h * 0.53;
     // 1. Main North-South Runway (Jets & Supersonic)
     const mainRunway: RunwayZone = {
       id: 'runway-main',
       name: 'Runway 34 / 16',
-      startX: w * 0.58,
+      startX: mainX,
       startY: h * 0.16,
-      endX: w * 0.58,
+      endX: mainX,
       endY: h * 0.78,
-      allowedTypes: ['jet', 'supersonic'],
+      allowedTypes: ['jet', 'supersonic', 'fighter'],
       heading: Math.PI / 2, // Landing Southbound downwards
       headingTolerance: 0.85,
       touchdownRadius: 36,
@@ -135,12 +159,12 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const diagRunway: RunwayZone = {
       id: 'runway-diagonal',
       name: 'Runway 28',
-      startX: w * 0.22,
-      startY: h * 0.24,
-      endX: w * 0.86,
-      endY: h * 0.64,
-      allowedTypes: ['propeller'],
-      heading: Math.atan2(h * 0.4, w * 0.64),
+      startX: diagonalStartX,
+      startY: diagonalStartY,
+      endX: diagonalEndX,
+      endY: diagonalEndY,
+      allowedTypes: ['propeller', 'cargo'],
+      heading: Math.atan2(diagonalEndY - diagonalStartY, diagonalEndX - diagonalStartX),
       headingTolerance: 0.85,
       touchdownRadius: 34,
       color: '#FFB300',
@@ -167,11 +191,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const helipad: RunwayZone = {
       id: 'helipad-h1',
       name: 'Helipad H1',
-      startX: w * 0.25,
-      startY: h * 0.53,
-      endX: w * 0.25,
-      endY: h * 0.53,
-      allowedTypes: ['helicopter'],
+      startX: helipadX,
+      startY: helipadY,
+      endX: helipadX,
+      endY: helipadY,
+      allowedTypes: ['helicopter', 'tiltrotor'],
       heading: 0,
       headingTolerance: Math.PI,
       touchdownRadius: 34,
@@ -179,8 +203,23 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       type: 'helipad',
     };
 
-    runwaysRef.current = [mainRunway, diagRunway, waterZone, helipad];
-  }, []);
+    const mooring: RunwayZone = {
+      id: 'mooring-m1',
+      name: 'Mooring M1',
+      startX: layout === 'ridge' ? w * 0.80 : w * 0.83,
+      startY: layout === 'delta' ? h * 0.30 : h * 0.22,
+      endX: layout === 'ridge' ? w * 0.80 : w * 0.83,
+      endY: layout === 'delta' ? h * 0.30 : h * 0.22,
+      allowedTypes: ['zeppelin'],
+      heading: 0,
+      headingTolerance: Math.PI,
+      touchdownRadius: 42,
+      color: '#FF5CD6',
+      type: 'mooring',
+    };
+
+    runwaysRef.current = [mainRunway, diagRunway, waterZone, helipad, mooring];
+  }, [currentLevel.mapLayout]);
 
   // Spawn aircraft from perimeter
   const spawnAircraft = useCallback(() => {
@@ -237,6 +276,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       landingCleared: false,
       isLanding: false,
       landingProgress: 0,
+      fuelRemaining: currentLevel.mission === 'fuelPriority' ? def.fuelSeconds : undefined,
       warningLevel: 'safe',
       landed: false,
       createdAt: Date.now(),
@@ -332,11 +372,29 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const updatePhysics = useCallback((dt: number) => {
     const planes = planesRef.current;
     const runways = runwaysRef.current;
+    const missionHazards = getMissionHazards(
+      currentLevel.mission,
+      dimensions.width,
+      dimensions.height,
+      missionElapsedRef.current,
+    );
+    const wind = getCrosswindVector(currentLevel, dt);
 
     warningBeepCooldownRef.current -= dt;
+    missionWarningCooldownRef.current -= dt;
 
     for (let i = planes.length - 1; i >= 0; i--) {
       const p = planes[i];
+
+      if (currentLevel.mission === 'fuelPriority' && p.fuelRemaining !== undefined && !p.isLanding) {
+        p.fuelRemaining = Math.max(0, p.fuelRemaining - dt);
+        if (p.fuelRemaining <= 0 && !missionFailureReportedRef.current) {
+          missionFailureReportedRef.current = true;
+          isGameOverRef.current = true;
+          onGameOver('Fuel exhausted — priority arrival lost.', scoreRef.current, landingsCountRef.current);
+          return;
+        }
+      }
 
       // Staged landing sequence: final approach blends into the threshold, followed by
       // flare, tyre contact, braking, and taxi-out instead of instant runway teleportation.
@@ -350,11 +408,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           p.landingEntrySpeed ??= p.speed;
           p.landingEntryHeading ??= p.heading;
           p.speed = p.landingEntrySpeed * landing.speedFactor;
-          p.heading = targetRunway.type === 'helipad'
+          p.heading = isVerticalDestination(targetRunway)
             ? p.landingEntryHeading
             : blendLandingHeading(p.landingEntryHeading, targetRunway.heading, landing.approachBlend);
 
-          if (targetRunway.type === 'helipad') {
+          if (isVerticalDestination(targetRunway)) {
             p.x = entry.x + (targetRunway.startX - entry.x) * landing.approachBlend;
             p.y = entry.y + (targetRunway.startY - entry.y) * landing.approachBlend;
           } else if (landing.approachBlend < 0.999) {
@@ -365,7 +423,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
             p.y = targetRunway.startY + (targetRunway.endY - targetRunway.startY) * landing.runwayProgress;
           }
           // A malformed route can never make the landing animation travel back up the runway.
-          if (targetRunway.type !== 'helipad' && !isForwardAlongRunway(entry.x, entry.y, p.x, p.y, targetRunway.heading)) {
+          if (!isVerticalDestination(targetRunway) && !isForwardAlongRunway(entry.x, entry.y, p.x, p.y, targetRunway.heading)) {
             p.x = targetRunway.startX;
             p.y = targetRunway.startY;
           }
@@ -423,6 +481,27 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       p.x += Math.cos(p.heading) * p.speed * dt;
       p.y += Math.sin(p.heading) * p.speed * dt;
 
+      // Crosswind shifts the aircraft but never edits the controller's line. The player
+      // sees the flight drift and can issue a new deliberate course, as in a live sector.
+      p.x += wind.x;
+      p.y += wind.y;
+
+      for (const hazard of missionHazards) {
+        if (!isInsideMissionHazard(p, hazard, getAircraftSafetyRadius(p.type) * 0.35)) continue;
+        if (hazard.kind === 'storm') {
+          const escapeHeading = Math.atan2(p.y - hazard.y, p.x - hazard.x);
+          p.x += Math.cos(escapeHeading) * dt * 8;
+          p.y += Math.sin(escapeHeading) * dt * 8;
+          continue;
+        }
+        if (!missionFailureReportedRef.current) {
+          missionFailureReportedRef.current = true;
+          isGameOverRef.current = true;
+          onGameOver(`${hazard.label} breach — aircraft lost.`, scoreRef.current, landingsCountRef.current);
+          return;
+        }
+      }
+
       // A flight can only land after the player completes a route that reached the green
       // clearance state. Merely flying through a runway capture circle never authorizes landing.
       const assignedRunway = getAssignedRunway(p.type, runways);
@@ -436,7 +515,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           insideCapture: isInsidePhysicalTouchdown(p, assignedRunway),
           headingDifference: angleDiff,
           headingTolerance: assignedRunway.headingTolerance,
-          isHelipad: assignedRunway.type === 'helipad',
+          isHelipad: isVerticalDestination(assignedRunway),
         });
         if (authorized) {
           const incomingHeading = p.heading;
@@ -460,7 +539,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         p.targetHeading = Math.atan2(cy - p.y, cx - p.x);
       }
     }
-  }, [dimensions, currentLevel, levelIndex, onPlaneLanded, onLevelComplete]);
+  }, [dimensions, currentLevel, levelIndex, onPlaneLanded, onLevelComplete, onGameOver]);
 
   // Main Render Loop onto HTML Canvas
   const draw = useCallback(() => {
@@ -471,8 +550,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     const w = dimensions.width;
     const h = dimensions.height;
+    const pixelRatio = getCanvasPixelRatio(
+      Platform.OS === 'web' && typeof window !== 'undefined' ? window.devicePixelRatio : 1,
+    );
+    const visualQuality = getVisualQuality(planesRef.current.length);
 
     // Clear
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, w, h);
 
     // 1. Premium airport map background: deep ocean, island, apron and taxiways
@@ -509,16 +595,18 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     }
 
     // Fine ocean-current lines add depth without competing with the aircraft.
-    ctx.save();
-    ctx.strokeStyle = 'rgba(80, 196, 224, 0.07)';
-    ctx.lineWidth = 1;
-    for (let offset = -h; offset < w + h; offset += 34) {
-      ctx.beginPath();
-      ctx.moveTo(offset, 0);
-      ctx.lineTo(offset + h, h);
-      ctx.stroke();
+    if (visualQuality !== 'focused') {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(80, 196, 224, 0.055)';
+      ctx.lineWidth = 1;
+      for (let offset = -h; offset < w + h; offset += 42) {
+        ctx.beginPath();
+        ctx.moveTo(offset, 0);
+        ctx.lineTo(offset + h, h);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // Island landmass keeps the real landscape visible rather than covering it with a flat map layer.
     const islandGrad = ctx.createLinearGradient(w * 0.1, h * 0.1, w * 0.9, h * 0.9);
@@ -599,35 +687,41 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     // 2. Radar Concentric Rings & Radial Scan
     const cx = w * 0.5;
     const cy = h * 0.48;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(97, 218, 236, 0.08)';
-    for (let r = 50; r <= Math.max(w, h); r += 65) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
+    if (visualQuality !== 'focused') {
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(97, 218, 236, 0.07)';
+      for (let r = 56; r <= Math.max(w, h); r += 76) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     // Rotating Radar Sweep Light beam
-    radarSweepAngleRef.current += 0.025;
-    const sweepA = radarSweepAngleRef.current;
-    const sweepGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(w, h));
-    sweepGrad.addColorStop(0, 'rgba(0, 229, 255, 0.18)');
-    sweepGrad.addColorStop(1, 'rgba(0, 229, 255, 0.0)');
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, Math.max(w, h), sweepA, sweepA + 0.45);
-    ctx.closePath();
-    ctx.fillStyle = sweepGrad;
-    ctx.fill();
-    ctx.restore();
+    if (visualQuality === 'high') {
+      radarSweepAngleRef.current += 0.015;
+      const sweepA = radarSweepAngleRef.current;
+      const sweepGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(w, h));
+      sweepGrad.addColorStop(0, 'rgba(0, 229, 255, 0.12)');
+      sweepGrad.addColorStop(1, 'rgba(0, 229, 255, 0.0)');
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, Math.max(w, h), sweepA, sweepA + 0.32);
+      ctx.closePath();
+      ctx.fillStyle = sweepGrad;
+      ctx.fill();
+      ctx.restore();
+    }
 
     // Incoming-flight edge dots: before a plane is selectable, show the color and direction
     // of the aircraft about to enter the sector. This keeps the original game's anticipatory
     // radar feel without drawing an automatic route across the board.
     planesRef.current.forEach((plane) => {
       if (plane.isLanding || plane.landed) return;
-      const isNearEdge = plane.x < 34 || plane.x > w - 34 || plane.y < 34 || plane.y > h - 34;
+      const entryRevealDistance = currentLevel.mission === 'lowVisibility' ? 15 : 34;
+      const isNearEdge = plane.x < entryRevealDistance || plane.x > w - entryRevealDistance
+        || plane.y < entryRevealDistance || plane.y > h - entryRevealDistance;
       if (!isNearEdge) return;
       const color = AIRCRAFT_DEFS[plane.type].color;
       const startX = Math.max(7, Math.min(w - 7, plane.x));
@@ -654,33 +748,46 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     runwaysRef.current.forEach(runway => {
       const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
       const isSuggestedRunway = Boolean(selectedPlane && isAssignedRunway(selectedPlane.type, runway));
-      if (runway.type === 'helipad') {
-        const padSize = 58;
+      if (isVerticalDestination(runway)) {
+        const isMooring = runway.type === 'mooring';
+        const padSize = isMooring ? 68 : 58;
         const pulse = isSuggestedRunway ? 1 + Math.sin(Date.now() * 0.012) * 0.08 : 1;
         ctx.save();
         ctx.translate(runway.startX, runway.startY);
         ctx.scale(pulse, pulse);
         ctx.shadowColor = runway.color;
         ctx.shadowBlur = isSuggestedRunway ? 20 : 10;
-        ctx.fillStyle = '#16152a';
-        ctx.fillRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        ctx.fillStyle = isMooring ? '#26152a' : '#16152a';
+        if (isMooring) {
+          ctx.beginPath();
+          ctx.ellipse(0, 0, padSize / 2, padSize * 0.26, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        }
         ctx.strokeStyle = runway.color;
         ctx.lineWidth = isSuggestedRunway ? 4 : 3;
-        ctx.strokeRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        if (isMooring) {
+          ctx.beginPath();
+          ctx.ellipse(0, 0, padSize / 2, padSize * 0.26, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(-padSize / 2, -padSize / 2, padSize, padSize);
+        }
         ctx.shadowBlur = 0;
         ctx.strokeStyle = 'rgba(255,255,255,0.82)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.arc(0, 0, isMooring ? 15 : 18, 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = '#ffffff';
-        ctx.font = '900 27px -apple-system, system-ui, sans-serif';
+        ctx.font = `900 ${isMooring ? 18 : 27}px -apple-system, system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('H', 0, 1);
+        ctx.fillText(isMooring ? 'M1' : 'H', 0, 1);
         ctx.textBaseline = 'alphabetic';
         ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        const label = 'HELI · H1';
+        const label = isMooring ? 'AIRSHIP · M1' : 'HELI / VTOL · H1';
         const labelWidth = ctx.measureText(label).width + 14;
         ctx.fillStyle = 'rgba(18, 12, 34, 0.94)';
         ctx.fillRect(-labelWidth / 2, -46, labelWidth, 17);
@@ -789,6 +896,83 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fillText(runwayLabel, runwayLabelPosition.x, runwayLabelPosition.y + 12);
       ctx.restore();
     });
+
+    // Sector missions are rendered as clear tactical objects, never as background-only art.
+    const missionHazards = getMissionHazards(currentLevel.mission, w, h, missionElapsedRef.current);
+    missionHazards.forEach((hazard) => {
+      const pulse = 0.8 + Math.sin(Date.now() * 0.008 + hazard.x) * 0.2;
+      ctx.save();
+      ctx.translate(hazard.x, hazard.y);
+      ctx.rotate(hazard.rotation);
+      const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, Math.max(hazard.radiusX, hazard.radiusY));
+      glow.addColorStop(0, `${hazard.color}66`);
+      glow.addColorStop(0.72, `${hazard.color}20`);
+      glow.addColorStop(1, `${hazard.color}00`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, hazard.radiusX * 1.18, hazard.radiusY * 1.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hazard.kind === 'storm' ? 'rgba(20, 46, 91, 0.55)' : 'rgba(30, 15, 28, 0.62)';
+      ctx.strokeStyle = hazard.color;
+      ctx.lineWidth = hazard.kind === 'storm' ? 2.5 : 2;
+      ctx.setLineDash(hazard.kind === 'storm' ? [5, 4] : [3, 5]);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, hazard.radiusX, hazard.radiusY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (hazard.kind === 'storm') {
+        ctx.strokeStyle = `rgba(220, 242, 255, ${0.34 + pulse * 0.28})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.min(hazard.radiusX, hazard.radiusY) * (0.32 + pulse * 0.16), 0, Math.PI * 1.65);
+        ctx.stroke();
+      } else if (hazard.kind === 'object') {
+        ctx.fillStyle = '#ffe8f9';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, hazard.radiusX * 0.56, hazard.radiusY * 0.46, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (hazard.kind === 'fire') {
+        ctx.fillStyle = `rgba(255, 203, 90, ${0.56 + pulse * 0.22})`;
+        for (let flame = 0; flame < 5; flame += 1) {
+          ctx.beginPath();
+          ctx.arc(-hazard.radiusX * 0.45 + flame * hazard.radiusX * 0.22, Math.sin(flame) * 5, 4 + pulse * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.font = '800 9px -apple-system, system-ui, sans-serif';
+      const labelWidth = ctx.measureText(hazard.label).width + 12;
+      const labelPosition = clampRadarLabel(hazard.x, hazard.y - hazard.radiusY - 20, labelWidth, w, h);
+      ctx.fillStyle = 'rgba(8, 15, 26, 0.94)';
+      ctx.fillRect(labelPosition.x - labelWidth / 2, labelPosition.y, labelWidth, 16);
+      ctx.strokeStyle = hazard.color;
+      ctx.strokeRect(labelPosition.x - labelWidth / 2, labelPosition.y, labelWidth, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(hazard.label, labelPosition.x, labelPosition.y + 11.5);
+      ctx.restore();
+    });
+
+    if (currentLevel.mission === 'crosswind' || currentLevel.mission === 'fuelPriority' || currentLevel.mission === 'lowVisibility') {
+      const status = currentLevel.mission === 'crosswind'
+        ? `WIND ${currentLevel.windSpeed} · DRIFT ACTIVE`
+        : currentLevel.mission === 'fuelPriority'
+          ? 'FUEL PRIORITY · LAND LOWEST TIMER FIRST'
+          : 'LOW VISIBILITY · WATCH ENTRY DOTS';
+      ctx.save();
+      ctx.font = '800 9px -apple-system, system-ui, sans-serif';
+      const statusWidth = ctx.measureText(status).width + 14;
+      ctx.fillStyle = 'rgba(3, 12, 20, 0.86)';
+      ctx.fillRect(8, h - 25, statusWidth, 17);
+      ctx.strokeStyle = currentLevel.mission === 'fuelPriority' ? '#FFB300' : '#8ad5ff';
+      ctx.strokeRect(8, h - 25, statusWidth, 17);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(status, 15, h - 13);
+      ctx.restore();
+    }
 
     // 4. Selection highlights only the destination beacon. The aircraft tag already names
     // the assigned route; drawing a second full-length guide beside a player route caused
@@ -996,13 +1180,20 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const landingValidation = selectedPlane && routeOrigin && selectedRunway
         ? validateLandingRoute(routeOrigin, draftRoute, selectedRunway)
         : null;
-      const isLandingLocked = Boolean(landingValidation?.isLocked);
+      const draftHazard = routeStartPointRef.current
+        ? routeIntersectsMissionHazard(
+          routeStartPointRef.current,
+          draftRoute,
+          getMissionHazards(currentLevel.mission, w, h, missionElapsedRef.current),
+        )
+        : undefined;
+      const isLandingLocked = Boolean(landingValidation?.isLocked && !draftHazard);
 
       // The green capture window is deliberately large and only appears while the player is
       // drawing. It explains exactly where a valid route should end without altering the route.
       if (selectedRunway && landingValidation) {
         const isHelipad = selectedRunway.type === 'helipad';
-        const guideColor = isLandingLocked ? '#00E676' : selectedRunway.color;
+        const guideColor = draftHazard ? '#FF3D71' : isLandingLocked ? '#00E676' : selectedRunway.color;
         const approachEntry = getApproachEntry(selectedRunway, Math.min(104, landingValidation.captureRadius + 14));
         const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
         ctx.save();
@@ -1058,7 +1249,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           const target = selectedRunway.id === 'runway-main' ? 'R34'
             : selectedRunway.id === 'runway-diagonal' ? 'R28'
               : selectedRunway.id === 'helipad-h1' ? 'H1' : 'BAY';
-          const hint = !landingValidation.isInsideCapture
+          const hint = draftHazard
+            ? `AVOID ${draftHazard.label}`
+            : !landingValidation.isInsideCapture
             ? `ENTER ${target} ZONE`
             : !landingValidation.isOnApproachSide
               ? 'STOP BEFORE THRESHOLD'
@@ -1092,7 +1285,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const scale = landing ? 0.95 + (1 - approachAltitude / 12) * 0.05 : 1;
 
       // Fine vapour trail is visible only during flight; it disappears during runway rollout.
-      if (!p.isLanding && p.type !== 'helicopter') {
+      if (!p.isLanding && !isVerticalAircraft(p.type)) {
         const trailLength = p.type === 'supersonic' ? 34 : 22;
         ctx.save();
         ctx.lineCap = 'round';
@@ -1116,7 +1309,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       // Ground-contact detail anchors the rollout to the actual assigned surface.
       // Asphalt receives growing rubber marks; water receives a fading V-shaped wake.
       const landingRunway = landing ? getAssignedRunway(p.type, runwaysRef.current) : undefined;
-      if (landing && landingRunway && landing.runwayProgress > 0.06) {
+      if (landing && landingRunway && landing.runwayProgress > 0.06 && !isVerticalAircraft(p.type)) {
         const runwayVectorX = landingRunway.endX - landingRunway.startX;
         const runwayVectorY = landingRunway.endY - landingRunway.startY;
         const runwayLength = Math.hypot(runwayVectorX, runwayVectorY) || 1;
@@ -1152,7 +1345,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
 
       // Two soft landing lamps lead the eye into the flare without obscuring player-drawn routes.
-      if (landing && (landing.stage === 'finalApproach' || landing.stage === 'flare') && p.type !== 'helicopter') {
+      if (landing && (landing.stage === 'finalApproach' || landing.stage === 'flare') && !isVerticalAircraft(p.type)) {
         const beamLength = 22 + landing.altitude * 1.4;
         ctx.save();
         ctx.translate(p.x, p.y - approachAltitude * 0.3);
@@ -1227,14 +1420,15 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.shadowBlur = 5;
       ctx.lineWidth = 1.8;
 
-      if (p.type === 'helicopter') {
-        // Compact rescue helicopter: animated spinning rotor disc, tail rotor, boom and skids.
+      if (p.type === 'helicopter' || p.type === 'tiltrotor') {
+        // Vertical aircraft: animated rotor disc, tail rotor, boom and skids.
         // The translucent disc keeps the rotor readable during high RPM without looking like static lines.
         const time = Date.now() * 0.001;
-        const rotorRadius = def.wingspan * 0.62;
+        const isTiltrotor = p.type === 'tiltrotor';
+        const rotorRadius = def.wingspan * (isTiltrotor ? 0.22 : 0.62);
         const rotorPulse = 0.96 + Math.sin(time * 10 + p.createdAt) * 0.035;
         ctx.save();
-        ctx.translate(-1, 0);
+        ctx.translate(isTiltrotor ? -2 : -1, 0);
         ctx.scale(rotorPulse, rotorPulse);
         const rotorDisc = ctx.createRadialGradient(0, 0, rotorRadius * 0.12, 0, 0, rotorRadius);
         rotorDisc.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
@@ -1242,21 +1436,38 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         rotorDisc.addColorStop(1, 'rgba(200, 107, 255, 0)');
         ctx.fillStyle = rotorDisc;
         ctx.beginPath();
-        ctx.ellipse(0, 0, rotorRadius, rotorRadius * 0.34, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, rotorRadius * (isTiltrotor ? 2.9 : 1), rotorRadius * 0.34, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'rgba(248, 242, 255, 0.28)';
         ctx.lineWidth = 0.8;
         ctx.beginPath();
-        ctx.ellipse(0, 0, rotorRadius, rotorRadius * 0.34, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, rotorRadius * (isTiltrotor ? 2.9 : 1), rotorRadius * 0.34, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
 
         ctx.beginPath();
-        ctx.ellipse(0, 0, def.length * 0.42, def.length * 0.27, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, def.length * 0.42, def.length * (isTiltrotor ? 0.18 : 0.27), 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = def.color;
         ctx.fillRect(-def.length * 0.72, -2.1, def.length * 0.52, 4.2);
+        if (isTiltrotor) {
+          ctx.fillRect(-4, -def.wingspan * 0.47, 8, def.wingspan * 0.94);
+          [-1, 1].forEach((side) => {
+            ctx.save();
+            ctx.translate(0, side * def.wingspan * 0.42);
+            ctx.rotate(time * 18 + side * p.createdAt);
+            ctx.strokeStyle = 'rgba(248, 242, 255, 0.78)';
+            ctx.lineWidth = 1.25;
+            ctx.beginPath();
+            ctx.moveTo(-rotorRadius * 1.2, 0);
+            ctx.lineTo(rotorRadius * 1.2, 0);
+            ctx.moveTo(0, -rotorRadius * 1.2);
+            ctx.lineTo(0, rotorRadius * 1.2);
+            ctx.stroke();
+            ctx.restore();
+          });
+        }
         ctx.strokeStyle = '#f2eaff';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
@@ -1287,6 +1498,24 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.lineTo(rotorRadius * 0.7, rotorRadius * 0.7);
         ctx.stroke();
         ctx.restore();
+      } else if (p.type === 'zeppelin') {
+        // Airship: large envelope with a gondola, tail fins, and a distinct mooring role.
+        ctx.fillStyle = 'rgba(255, 92, 214, 0.94)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, def.length * 0.48, def.wingspan * 0.28, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#e7f4fb';
+        ctx.fillRect(-def.length * 0.10, -3, def.length * 0.26, 6);
+        ctx.fillStyle = '#16212e';
+        ctx.fillRect(-def.length * 0.10, 5, def.length * 0.20, 4);
+        ctx.strokeStyle = '#fbd9f5';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(-def.length * 0.43, -def.wingspan * 0.18);
+        ctx.lineTo(-def.length * 0.50, 0);
+        ctx.lineTo(-def.length * 0.43, def.wingspan * 0.18);
+        ctx.stroke();
       } else if (p.type === 'supersonic') {
         // Delta wing supersonic jet
         ctx.beginPath();
@@ -1294,6 +1523,19 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.lineTo(-def.length * 0.45, def.wingspan * 0.5); // wing tip right
         ctx.lineTo(-def.length * 0.25, 0); // wing root
         ctx.lineTo(-def.length * 0.45, -def.wingspan * 0.5); // wing tip left
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (p.type === 'fighter') {
+        // Fighter: compact swept wings distinguish its agile high-speed role.
+        ctx.beginPath();
+        ctx.moveTo(def.length * 0.56, 0);
+        ctx.lineTo(-def.length * 0.20, def.wingspan * 0.50);
+        ctx.lineTo(-def.length * 0.10, def.wingspan * 0.12);
+        ctx.lineTo(-def.length * 0.46, def.wingspan * 0.22);
+        ctx.lineTo(-def.length * 0.46, -def.wingspan * 0.22);
+        ctx.lineTo(-def.length * 0.10, -def.wingspan * 0.12);
+        ctx.lineTo(-def.length * 0.20, -def.wingspan * 0.50);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -1341,8 +1583,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.fill();
       }
 
-      // Twin engine nacelles give jets a true aircraft silhouette.
-      if (p.type === 'jet' || p.type === 'supersonic') {
+      // Twin engine nacelles give powered fixed-wing aircraft a true silhouette.
+      if (p.type === 'jet' || p.type === 'supersonic' || p.type === 'fighter' || p.type === 'cargo') {
         [-1, 1].forEach((side) => {
           ctx.fillStyle = '#243442';
           ctx.beginPath();
@@ -1359,13 +1601,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
 
       // Distinct propulsion signatures improve aircraft recognition while in motion.
-      if (p.type === 'helicopter') {
+      if (p.type === 'helicopter' || p.type === 'tiltrotor') {
         const hoverPulse = 0.14 + Math.sin(Date.now() * 0.018 + p.createdAt) * 0.04;
         ctx.fillStyle = `rgba(200, 107, 255, ${hoverPulse})`;
         ctx.beginPath();
         ctx.ellipse(-def.length * 0.48, 0, 7, 4.2, 0, 0, Math.PI * 2);
         ctx.fill();
-      } else if (p.type === 'supersonic') {
+      } else if (p.type === 'supersonic' || p.type === 'fighter') {
         const flameLength = 12 + Math.sin(Date.now() * 0.035 + p.createdAt) * 3;
         const flame = ctx.createLinearGradient(-def.length * 0.38, 0, -def.length * 0.38 - flameLength, 0);
         flame.addColorStop(0, 'rgba(248, 252, 255, 0.95)');
@@ -1427,7 +1669,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.shadowBlur = 0;
 
       // Gear appears during final approach and remains down through taxi-out.
-      if (landing?.gearDown && p.type !== 'helicopter') {
+      if (landing?.gearDown && !isVerticalAircraft(p.type)) {
         ctx.strokeStyle = '#1d2830';
         ctx.lineWidth = 2;
         [-7, 5].forEach((wheelX) => {
@@ -1477,20 +1719,32 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ? 'JET → R34'
         : p.type === 'supersonic'
           ? 'SST → R34'
+          : p.type === 'fighter'
+            ? 'FTR → R34'
           : p.type === 'propeller'
             ? 'PROP → R28'
+            : p.type === 'cargo'
+              ? 'CARGO → R28'
             : p.type === 'helicopter'
               ? 'HELI → H1'
-              : 'SEA → BAY';
+              : p.type === 'tiltrotor'
+                ? 'VTOL → H1'
+                : p.type === 'zeppelin'
+                  ? 'AIRSHIP → M1'
+                  : 'SEA → BAY';
       ctx.save();
       ctx.font = '800 10px -apple-system, system-ui, sans-serif';
       const isSelected = selectedPlaneIdRef.current === p.id;
       const isNearEdge = p.x < 32 || p.x > w - 32 || p.y < 40 || p.y > h - 30;
-      if (!shouldShowFlightTag({ isSelected, isNearEdge, isLanding: Boolean(landing) })) {
+      const fuelBand = getFuelBand(p.fuelRemaining);
+      const isPriority = currentLevel.mission === 'fuelPriority' && fuelBand !== 'normal';
+      if (!shouldShowFlightTag({ isSelected, isNearEdge, isLanding: Boolean(landing), isPriority })) {
         ctx.restore();
         return;
       }
-      const tagText = routeLabel;
+      const tagText = isPriority && p.fuelRemaining !== undefined
+        ? `FUEL ${Math.ceil(p.fuelRemaining)}s · ${routeLabel}`
+        : routeLabel;
       const routeWidth = ctx.measureText(tagText).width + 12;
       const tagPosition = clampRadarLabel(
         p.x,
@@ -1504,7 +1758,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       const tagY = tagPosition.y;
       ctx.fillStyle = isSelected ? 'rgba(0, 62, 77, 0.96)' : 'rgba(3, 12, 20, 0.90)';
       ctx.fillRect(tagX - routeWidth / 2, tagY, routeWidth, 16);
-      ctx.strokeStyle = def.color;
+      ctx.strokeStyle = isPriority ? (fuelBand === 'critical' ? '#FF3D71' : '#FFB300') : def.color;
       ctx.lineWidth = isSelected ? 2.4 : 1.5;
       ctx.strokeRect(tagX - routeWidth / 2, tagY, routeWidth, 16);
       ctx.fillStyle = '#ffffff';
@@ -1605,6 +1859,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       } else if (!isPaused && !isGameOverRef.current && !sectorCompleteRef.current) {
         cloudDriftRef.current = (cloudDriftRef.current + dt * 0.035) % 1.35;
+        missionElapsedRef.current += dt;
         // Spawn schedule
         const pressure = getTrafficPressure(landingsCountRef.current, currentLevel.targetLandings);
         const spawnInterval = getDynamicSpawnInterval(currentLevel.spawnIntervalMs, pressure);
@@ -1648,6 +1903,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     routeSnapshotRef.current = null;
     isEditingRouteRef.current = false;
     draftLandingClearedRef.current = false;
+    draftHazardViolationRef.current = false;
   }, []);
 
   const handlePointerDown = (clientX: number, clientY: number, pointerId: number) => {
@@ -1701,6 +1957,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       activeDrawPathRef.current = [];
       isEditingRouteRef.current = false;
       draftLandingClearedRef.current = false;
+      draftHazardViolationRef.current = false;
       sounds.playSelect();
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1712,6 +1969,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       gestureStartPointRef.current = null;
       activePointerIdRef.current = null;
       routeSnapshotRef.current = null;
+      draftHazardViolationRef.current = false;
     }
   };
 
@@ -1743,7 +2001,14 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     const matchingRunway = plane && getAssignedRunway(plane.type, runwaysRef.current);
     if (plane && routeStart && matchingRunway) {
       const candidateRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
-      draftLandingClearedRef.current = validateLandingRoute(routeStart, candidateRoute, matchingRunway).isLocked;
+      const hazard = routeIntersectsMissionHazard(
+        routeStart,
+        candidateRoute,
+        getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
+      );
+      draftHazardViolationRef.current = Boolean(hazard);
+      draftLandingClearedRef.current = !hazard
+        && validateLandingRoute(routeStart, candidateRoute, matchingRunway).isLocked;
     }
   };
 
@@ -1762,7 +2027,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           // with an automatic runway approach. Landing capture still validates the final angle.
           plane.path = playerRoute;
           const matchingRunway = getAssignedRunway(plane.type, runwaysRef.current);
+          const hazard = routeIntersectsMissionHazard(
+            routeStart,
+            playerRoute,
+            getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
+          );
           plane.landingCleared = Boolean(matchingRunway
+            && !hazard
             && validateLandingRoute(routeStart, playerRoute, matchingRunway).isLocked);
           sounds.playSelect();
         } else if (routeSnapshotRef.current) {
@@ -1779,6 +2050,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     routeSnapshotRef.current = null;
     isEditingRouteRef.current = false;
     draftLandingClearedRef.current = false;
+    draftHazardViolationRef.current = false;
   };
 
   // Installed PWA sessions can be interrupted by a call, lock screen, or app switch.
@@ -1842,6 +2114,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     crashReportedRef.current = false;
     activeConflictsRef.current = [];
     sectorCompleteRef.current = false;
+    missionElapsedRef.current = 0;
+    missionWarningCooldownRef.current = 0;
+    missionFailureReportedRef.current = false;
+    draftHazardViolationRef.current = false;
     cancelRouteEdit();
     lastSpawnTimeRef.current = performance.now();
     const firstFlight = setTimeout(() => {
@@ -1855,8 +2131,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       {Platform.OS === 'web' ? (
         <canvas
           ref={canvasRef}
-          width={dimensions.width}
-          height={dimensions.height}
+          width={Math.ceil(dimensions.width * getCanvasPixelRatio(typeof window !== 'undefined' ? window.devicePixelRatio : 1))}
+          height={Math.ceil(dimensions.height * getCanvasPixelRatio(typeof window !== 'undefined' ? window.devicePixelRatio : 1))}
           style={{
             width: dimensions.width,
             height: dimensions.height,

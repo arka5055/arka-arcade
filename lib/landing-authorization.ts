@@ -1,4 +1,4 @@
-import type { Point, RunwayZone } from '@/constants/game-types';
+import { isVerticalDestination, type Point, type RunwayZone } from '../constants/game-types';
 
 export interface LandingAuthorizationInput {
   /** True only after the player finishes a route that passed the green clearance validator. */
@@ -28,7 +28,7 @@ export function canCommitLanding(input: LandingAuthorizationInput): boolean {
  * only near the actual threshold. This prevents an aircraft from being pulled sideways into a runway.
  */
 export function getPhysicalTouchdownRadius(runway: RunwayZone): number {
-  return runway.type === 'helipad'
+  return isVerticalDestination(runway)
     ? runway.touchdownRadius + 6
     : Math.min(48, runway.touchdownRadius + 12);
 }

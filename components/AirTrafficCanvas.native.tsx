@@ -21,6 +21,7 @@ import {
   LEVELS,
   Point,
   RunwayZone,
+  isVerticalDestination,
 } from '@/constants/game-types';
 import {
   distanceToLineSegment,
@@ -44,8 +45,12 @@ interface AirTrafficCanvasProps {
 const routeName = (type: AircraftType) => {
   if (type === 'jet') return 'JET → R34';
   if (type === 'supersonic') return 'SST → R34';
+  if (type === 'fighter') return 'FTR → R34';
   if (type === 'propeller') return 'PROP → R28';
+  if (type === 'cargo') return 'CARGO → R28';
   if (type === 'helicopter') return 'HELI → H1';
+  if (type === 'tiltrotor') return 'VTOL → H1';
+  if (type === 'zeppelin') return 'AIRSHIP → M1';
   return 'SEA → BAY';
 };
 
@@ -73,12 +78,12 @@ export function AirTrafficCanvas({
     return [
       {
         id: 'runway-main', name: 'JET + SST · R34', startX: w * 0.66, startY: h * 0.18,
-        endX: w * 0.66, endY: h * 0.78, allowedTypes: ['jet', 'supersonic'],
+        endX: w * 0.66, endY: h * 0.78, allowedTypes: ['jet', 'supersonic', 'fighter'],
         heading: Math.PI / 2, headingTolerance: 1.1, touchdownRadius: 34, color: '#00E5FF', type: 'runway',
       },
       {
         id: 'runway-diagonal', name: 'PROP · R28', startX: w * 0.23, startY: h * 0.29,
-        endX: w * 0.85, endY: h * 0.64, allowedTypes: ['propeller'],
+        endX: w * 0.85, endY: h * 0.64, allowedTypes: ['propeller', 'cargo'],
         heading: Math.atan2(h * 0.35, w * 0.62), headingTolerance: 1.1, touchdownRadius: 32, color: '#FFB300', type: 'runway',
       },
       {
@@ -88,8 +93,13 @@ export function AirTrafficCanvas({
       },
       {
         id: 'helipad-h1', name: 'HELI · H1', startX: w * 0.25, startY: h * 0.53,
-        endX: w * 0.25, endY: h * 0.53, allowedTypes: ['helicopter'],
+        endX: w * 0.25, endY: h * 0.53, allowedTypes: ['helicopter', 'tiltrotor'],
         heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad',
+      },
+      {
+        id: 'mooring-m1', name: 'AIRSHIP · M1', startX: w * 0.82, startY: h * 0.22,
+        endX: w * 0.82, endY: h * 0.22, allowedTypes: ['zeppelin'],
+        heading: 0, headingTolerance: Math.PI, touchdownRadius: 42, color: '#FF5CD6', type: 'mooring',
       },
     ];
   }, [bounds]);
@@ -160,17 +170,17 @@ export function AirTrafficCanvas({
             }
             return [{
               ...plane,
-              heading: assignedRunway.type === 'helipad'
+              heading: isVerticalDestination(assignedRunway)
                 ? entryHeading
                 : blendLandingHeading(entryHeading, assignedRunway.heading, landing.approachBlend),
               landingProgress,
               landingEntry: entry,
               landingEntrySpeed: plane.landingEntrySpeed ?? plane.speed,
               landingEntryHeading: entryHeading,
-              x: assignedRunway.type === 'helipad' || landing.approachBlend < 0.999
+              x: isVerticalDestination(assignedRunway) || landing.approachBlend < 0.999
                 ? entry.x + (assignedRunway.startX - entry.x) * landing.approachBlend
                 : assignedRunway.startX + (assignedRunway.endX - assignedRunway.startX) * landing.runwayProgress,
-              y: assignedRunway.type === 'helipad' || landing.approachBlend < 0.999
+              y: isVerticalDestination(assignedRunway) || landing.approachBlend < 0.999
                 ? entry.y + (assignedRunway.startY - entry.y) * landing.approachBlend
                 : assignedRunway.startY + (assignedRunway.endY - assignedRunway.startY) * landing.runwayProgress,
             }];
@@ -207,7 +217,7 @@ export function AirTrafficCanvas({
             insideCapture: isInsidePhysicalTouchdown(moved, runway),
             headingDifference,
             headingTolerance: runway.headingTolerance,
-            isHelipad: runway.type === 'helipad',
+            isHelipad: isVerticalDestination(runway),
           }));
           if (runway && authorized) {
             const incomingHeading = moved.heading;
@@ -352,6 +362,15 @@ export function AirTrafficCanvas({
             <Rect x={helipad.startX - 29} y={helipad.startY - 29} width={58} height={58} fill="#16152a" stroke="#C86BFF" strokeWidth={3} />
             <Circle cx={helipad.startX} cy={helipad.startY} r={18} fill="none" stroke="#ffffff" strokeWidth={2} />
             <SvgText x={helipad.startX} y={helipad.startY + 9} fill="#ffffff" fontSize={27} fontWeight="900" textAnchor="middle">H</SvgText>
+          </G> : null;
+        })()}
+        {(() => {
+          const mooring = runways.find((runway) => runway.type === 'mooring');
+          return mooring ? <G>
+            <Circle cx={mooring.startX} cy={mooring.startY} r={27} fill="#26152a" stroke="#FF5CD6" strokeWidth={3} />
+            <Circle cx={mooring.startX} cy={mooring.startY} r={14} fill="none" stroke="#ffffff" strokeWidth={1.5} />
+            <SvgText x={mooring.startX} y={mooring.startY + 4} fill="#ffffff" fontSize={11} fontWeight="900" textAnchor="middle">M1</SvgText>
+            <SvgText x={mooring.startX} y={mooring.startY - 34} fill="#ffffff" fontSize={9} fontWeight="800" textAnchor="middle">AIRSHIP · M1</SvgText>
           </G> : null;
         })()}
 

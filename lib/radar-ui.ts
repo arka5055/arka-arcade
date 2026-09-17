@@ -34,10 +34,12 @@ export function shouldShowFlightTag({
   isSelected,
   isNearEdge,
   isLanding,
+  isPriority = false,
 }: {
   isSelected: boolean;
   isNearEdge: boolean;
   isLanding: boolean;
+  isPriority?: boolean;
 }): boolean {
-  return isSelected || isNearEdge || isLanding;
+  return isSelected || isNearEdge || isLanding || isPriority;
 }

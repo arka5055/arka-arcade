@@ -30,15 +30,25 @@ import {
 import { canSpawnInSector, getActiveAircraftBudget } from '../lib/traffic-director';
 import { clampRadarLabel, shouldShowFlightTag } from '../lib/radar-ui';
 import { RELEASE_LABEL, RELEASE_VERSION } from '../constants/release';
+import {
+  getCrosswindVector,
+  getFuelBand,
+  getMissionHazards,
+  getMissionPresentation,
+  isInsideMissionHazard,
+  routeIntersectsMissionHazard,
+} from '../lib/mission-system';
+import { getCanvasPixelRatio, getVisualQuality } from '../lib/render-quality';
+import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '../lib/campaign';
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.1.2');
-    expect(RELEASE_LABEL).toBe('BUILD v1.1.2');
+    expect(RELEASE_VERSION).toBe('v1.2.0');
+    expect(RELEASE_LABEL).toBe('BUILD v1.2.0');
   });
 
   it('defines valid specifications for each aircraft class', () => {
-    const types: AircraftType[] = ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter'];
+    const types: AircraftType[] = ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter', 'fighter', 'cargo', 'tiltrotor', 'zeppelin'];
     types.forEach((t) => {
       const def = AIRCRAFT_DEFS[t];
       expect(def).toBeDefined();
@@ -65,6 +75,7 @@ describe('Aircraft Definitions', () => {
       'runway-diagonal': '#FFB300',
       'water-bay': '#00E676',
       'helipad-h1': '#C86BFF',
+      'mooring-m1': '#FF5CD6',
     };
     Object.values(AIRCRAFT_DEFS).forEach((aircraft) => {
       expect(aircraft.color).toBe(runwayColors[aircraft.landingZoneId]);
@@ -86,12 +97,11 @@ describe('Aircraft Definitions', () => {
 
   it('keeps original-inspired mixed-fleet performance classes strictly ordered', () => {
     const ordering = getPerformanceOrdering();
-    expect(ordering).toEqual(['helicopter', 'propeller', 'seaplane', 'jet', 'supersonic']);
+    expect(ordering).toEqual(['helicopter', 'zeppelin', 'propeller', 'seaplane', 'tiltrotor', 'cargo', 'jet', 'fighter', 'supersonic']);
     for (let index = 1; index < ordering.length; index += 1) {
       const slower = AIRCRAFT_PERFORMANCE[ordering[index - 1]];
       const faster = AIRCRAFT_PERFORMANCE[ordering[index]];
       expect(slower.normalizedSpeed).toBeLessThan(faster.normalizedSpeed);
-      expect(slower.normalizedFootprint).toBeLessThan(faster.normalizedFootprint);
     }
   });
 
@@ -103,16 +113,20 @@ describe('Aircraft Definitions', () => {
 
   it('allows a flight to use exactly its assigned runway and rejects every other runway', () => {
     const runways: RunwayZone[] = [
-      { id: 'runway-main', name: 'R34', startX: 0, startY: 0, endX: 0, endY: 100, allowedTypes: ['jet', 'supersonic'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
-      { id: 'runway-diagonal', name: 'R28', startX: 0, startY: 0, endX: 100, endY: 100, allowedTypes: ['propeller'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#FFB300', type: 'runway' },
+      { id: 'runway-main', name: 'R34', startX: 0, startY: 0, endX: 0, endY: 100, allowedTypes: ['jet', 'supersonic', 'fighter'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
+      { id: 'runway-diagonal', name: 'R28', startX: 0, startY: 0, endX: 100, endY: 100, allowedTypes: ['propeller', 'cargo'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#FFB300', type: 'runway' },
       { id: 'water-bay', name: 'Bay', startX: 0, startY: 0, endX: 100, endY: 0, allowedTypes: ['seaplane'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E676', type: 'water' },
-      { id: 'helipad-h1', name: 'H1', startX: 50, startY: 50, endX: 50, endY: 50, allowedTypes: ['helicopter'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad' },
+      { id: 'helipad-h1', name: 'H1', startX: 50, startY: 50, endX: 50, endY: 50, allowedTypes: ['helicopter', 'tiltrotor'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad' },
+      { id: 'mooring-m1', name: 'M1', startX: 80, startY: 50, endX: 80, endY: 50, allowedTypes: ['zeppelin'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 42, color: '#FF5CD6', type: 'mooring' },
     ];
     expect(getAssignedRunway('supersonic', runways)?.id).toBe('runway-main');
     expect(isAssignedRunway('supersonic', runways[1])).toBe(false);
     expect(isAssignedRunway('seaplane', runways[2])).toBe(true);
     expect(getAssignedRunway('helicopter', runways)?.id).toBe('helipad-h1');
     expect(isAssignedRunway('helicopter', runways[0])).toBe(false);
+    expect(getAssignedRunway('cargo', runways)?.id).toBe('runway-diagonal');
+    expect(getAssignedRunway('tiltrotor', runways)?.id).toBe('helipad-h1');
+    expect(getAssignedRunway('zeppelin', runways)?.id).toBe('mooring-m1');
   });
 });
 
@@ -146,12 +160,22 @@ describe('Radar label placement', () => {
 
 describe('Game Levels Configuration', () => {
   it('contains increasing challenge across levels', () => {
-    expect(LEVELS.length).toBeGreaterThanOrEqual(4);
+    expect(LEVELS.length).toBe(18);
     for (let i = 1; i < LEVELS.length; i++) {
-      expect(LEVELS[i].targetLandings).toBeGreaterThan(LEVELS[i - 1].targetLandings);
+      expect(LEVELS[i].targetLandings).toBeGreaterThanOrEqual(LEVELS[i - 1].targetLandings);
       expect(LEVELS[i].spawnIntervalMs).toBeLessThanOrEqual(LEVELS[i - 1].spawnIntervalMs);
       expect(LEVELS[i].speedMultiplier).toBeGreaterThanOrEqual(LEVELS[i - 1].speedMultiplier);
     }
+  });
+
+  it('gives every sector an active mission and an unlock target', () => {
+    LEVELS.forEach((level, index) => {
+      expect(level.missionLabel.length).toBeGreaterThan(2);
+      expect(level.missionBrief.length).toBeGreaterThan(10);
+      expect(level.unlockScore).toBeGreaterThan(0);
+      expect(level.achievementId).toBe(`sector_${index + 1}`);
+    });
+    expect(new Set(LEVELS.map((level) => level.mission)).size).toBeGreaterThanOrEqual(8);
   });
 
   it('allows seaplanes only in later levels', () => {
@@ -476,5 +500,57 @@ describe('Scenery cloud shadows', () => {
     const later = getDriftingCloudShadows(1);
     expect(later[0].x).not.toBe(initial[0].x);
     expect(getDriftingCloudShadows(Number.NaN).every((shadow) => Number.isFinite(shadow.x))).toBe(true);
+  });
+});
+
+
+describe('Active mission system', () => {
+  it('creates readable, deterministic live hazards only for relevant sectors', () => {
+    const stormLevel = LEVELS.find((level) => level.mission === 'stormCell')!;
+    const stormNow = getMissionHazards(stormLevel.mission, 420, 680, 0);
+    const stormLater = getMissionHazards(stormLevel.mission, 420, 680, 10);
+    expect(stormNow).toHaveLength(1);
+    expect(stormNow[0].kind).toBe('storm');
+    expect(stormLater[0].x).not.toBe(stormNow[0].x);
+    expect(getMissionHazards('training', 420, 680, 0)).toEqual([]);
+  });
+
+  it('flags a player route crossing restricted terrain without modifying route points', () => {
+    const hazard = getMissionHazards('mountainPass', 420, 680, 0)[0];
+    const route = [{ x: 160, y: 265 }, { x: 220, y: 265 }];
+    const original = JSON.parse(JSON.stringify(route));
+    expect(routeIntersectsMissionHazard({ x: 90, y: 265 }, route, [hazard])?.id).toBe(hazard.id);
+    expect(route).toEqual(original);
+    expect(isInsideMissionHazard({ x: hazard.x, y: hazard.y }, hazard)).toBe(true);
+  });
+
+  it('limits wind effects to crosswind sectors and communicates fuel urgency predictably', () => {
+    const crosswind = LEVELS.find((level) => level.mission === 'crosswind')!;
+    const calm = LEVELS.find((level) => level.mission === 'training')!;
+    expect(Math.hypot(getCrosswindVector(crosswind, 1).x, getCrosswindVector(crosswind, 1).y)).toBeGreaterThan(0);
+    expect(getCrosswindVector(calm, 1)).toEqual({ x: 0, y: 0 });
+    expect(getFuelBand(40)).toBe('normal');
+    expect(getFuelBand(20)).toBe('caution');
+    expect(getFuelBand(10)).toBe('critical');
+    expect(getMissionPresentation(crosswind).windDrift).toBeGreaterThan(0);
+  });
+});
+
+describe('Campaign rewards and canvas quality', () => {
+  it('awards sector and mission achievements without requiring external accounts', () => {
+    const priorityIndex = LEVELS.findIndex((level) => level.mission === 'fuelPriority');
+    const achievementIds = getCampaignAchievementIds(priorityIndex);
+    expect(achievementIds).toContain(`sector_${priorityIndex + 1}`);
+    expect(achievementIds).toContain('fuel_guardian');
+    expect(CAREER_ACHIEVEMENTS.some((achievement) => achievement.id === 'campaign_complete')).toBe(true);
+  });
+
+  it('caps retina render density and trims cosmetic work before control responsiveness', () => {
+    expect(getCanvasPixelRatio(3)).toBe(2);
+    expect(getCanvasPixelRatio(1.5)).toBe(1.5);
+    expect(getCanvasPixelRatio(undefined)).toBe(1);
+    expect(getVisualQuality(3)).toBe('high');
+    expect(getVisualQuality(6)).toBe('balanced');
+    expect(getVisualQuality(8)).toBe('focused');
   });
 });

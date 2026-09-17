@@ -20,6 +20,7 @@ import {
 } from '@/constants/game-types';
 import { sounds } from '@/lib/sound-controller';
 import { loadGameStats, saveGameStats, GameStats, DEFAULT_STATS } from '@/lib/game-storage';
+import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '@/lib/campaign';
 import * as Haptics from 'expo-haptics';
 import { RELEASE_VERSION } from '@/constants/release';
 
@@ -39,21 +40,32 @@ export default function GameScreen() {
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showAchievementsModal, setShowAchievementsModal] = useState(false);
+  const [showSectorMap, setShowSectorMap] = useState(false);
+  const [resumeAfterModal, setResumeAfterModal] = useState(false);
+  const [pwaUpdateReady, setPwaUpdateReady] = useState(false);
 
   const comboTimerRef = useRef<any>(null);
   const authoritativeScoreRef = useRef(0);
 
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
-  const trafficLoad = ['LOW', 'MODERATE', 'HIGH', 'EXTREME'][levelIndex] || 'EXTREME';
-  const legendItems: Array<{ type: AircraftType; color: string; label: string }> = [
-    { type: 'jet' as AircraftType, color: '#00E5FF', label: 'JET / SST → R34' },
-    { type: 'propeller' as AircraftType, color: '#FFB300', label: 'PROP → R28' },
-    { type: 'seaplane' as AircraftType, color: '#00E676', label: 'SEA → BAY' },
-    { type: 'helicopter' as AircraftType, color: '#C86BFF', label: 'HELI → H1' },
-  ].filter((item) => currentLevel.allowedTypes.includes(item.type));
+  const trafficLoad = currentLevel.difficultyLabel;
+  const legendItems: Array<{ types: AircraftType[]; color: string; label: string }> = [
+    { types: ['jet', 'fighter', 'supersonic'] as AircraftType[], color: '#00E5FF', label: 'JET / FTR / SST → R34' },
+    { types: ['propeller', 'cargo'] as AircraftType[], color: '#FFB300', label: 'PROP / CARGO → R28' },
+    { types: ['seaplane'] as AircraftType[], color: '#00E676', label: 'SEAPLANE → BAY' },
+    { types: ['helicopter', 'tiltrotor'] as AircraftType[], color: '#C86BFF', label: 'HELI / VTOL → H1' },
+    { types: ['zeppelin'] as AircraftType[], color: '#FF5CD6', label: 'AIRSHIP → M1' },
+  ].filter((item) => item.types.some((type) => currentLevel.allowedTypes.includes(type)));
 
   useEffect(() => {
     loadGameStats().then(setStats);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onUpdateReady = () => setPwaUpdateReady(true);
+    window.addEventListener('skyline-pwa-update-ready', onUpdateReady);
+    return () => window.removeEventListener('skyline-pwa-update-ready', onUpdateReady);
   }, []);
 
   const handlePlaneLanded = useCallback(
@@ -135,16 +147,25 @@ export default function GameScreen() {
   const handleLevelComplete = useCallback((nextLevel: number) => {
     setShowLevelComplete(true);
     setStats((prev) => {
-      const unlocked = Math.max(prev.unlockedLevels, nextLevel + 1);
+      const completedSector = nextLevel;
+      const achievementIds = getCampaignAchievementIds(completedSector - 1);
+      const unlocked = Math.min(LEVELS.length, Math.max(prev.unlockedLevels, nextLevel + 1));
       const updated = {
         ...prev,
         unlockedLevels: unlocked,
-        highestSectorCompleted: Math.max(prev.highestSectorCompleted, nextLevel),
+        highestSectorCompleted: Math.max(prev.highestSectorCompleted, completedSector),
+        completedSectors: [...new Set([...prev.completedSectors, completedSector])].sort((left, right) => left - right),
+        completedMissions: [...new Set([...prev.completedMissions, currentLevel.mission])],
+        sectorBestScores: {
+          ...prev.sectorBestScores,
+          [String(completedSector)]: Math.max(prev.sectorBestScores[String(completedSector)] ?? 0, authoritativeScoreRef.current),
+        },
+        achievements: [...new Set([...prev.achievements, ...achievementIds])],
       };
       saveGameStats(updated);
       return updated;
     });
-  }, []);
+  }, [currentLevel.mission]);
 
   const handleAutoPause = useCallback(() => {
     setIsPaused(true);
@@ -176,6 +197,24 @@ export default function GameScreen() {
     }
   };
 
+  const selectSector = (index: number) => {
+    if (index + 1 > stats.unlockedLevels) return;
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    setShowSectorMap(false);
+    setShowGameOver(false);
+    setShowLevelComplete(false);
+    setLevelIndex(index);
+    setScore(0);
+    authoritativeScoreRef.current = 0;
+    setLandings(0);
+    setCombo(0);
+    setIsPaused(false);
+    setRunId((previousRunId) => previousRunId + 1);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  };
+
   const toggleSound = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
@@ -183,6 +222,25 @@ export default function GameScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+  };
+
+  const openOverlay = (setVisible: (visible: boolean) => void) => {
+    setResumeAfterModal(!isPaused);
+    setIsPaused(true);
+    setVisible(true);
+  };
+
+  const closeOverlay = (setVisible: (visible: boolean) => void) => {
+    setVisible(false);
+    if (resumeAfterModal) setIsPaused(false);
+  };
+
+  const handleMissionBannerPress = () => {
+    if (pwaUpdateReady && Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('skyline-apply-pwa-update'));
+      return;
+    }
+    openOverlay(setShowInfoModal);
   };
 
   return (
@@ -196,9 +254,15 @@ export default function GameScreen() {
               <Text style={styles.versionText}>{RELEASE_VERSION}</Text>
             </View>
           </View>
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {trafficLoad} TRAFFIC</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.levelBadge}
+            onPress={() => openOverlay(setShowSectorMap)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Open campaign sector map"
+          >
+            <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {trafficLoad} · {currentLevel.missionLabel}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.headerActions}>
@@ -214,7 +278,7 @@ export default function GameScreen() {
 
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowAchievementsModal(true)}
+            onPress={() => openOverlay(setShowAchievementsModal)}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Open career record"
@@ -224,7 +288,7 @@ export default function GameScreen() {
 
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowInfoModal(true)}
+            onPress={() => openOverlay(setShowInfoModal)}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Open controller briefing"
@@ -274,6 +338,21 @@ export default function GameScreen() {
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.missionBanner}
+        onPress={handleMissionBannerPress}
+        activeOpacity={0.78}
+        accessibilityRole="button"
+        accessibilityLabel={pwaUpdateReady ? 'A game update is ready. Activate update.' : `Current sector mission: ${currentLevel.missionLabel}. Open briefing.`}
+      >
+        <View style={styles.missionAccent} />
+        <View style={styles.missionCopy}>
+          <Text style={styles.missionTitle}>{pwaUpdateReady ? 'UPDATE READY' : currentLevel.missionLabel}</Text>
+          <Text style={styles.missionDescription} numberOfLines={1}>{pwaUpdateReady ? 'Tap to refresh safely before your next approach.' : currentLevel.missionBrief}</Text>
+        </View>
+        <Text style={styles.missionChevron}>{pwaUpdateReady ? '↻' : '›'}</Text>
+      </TouchableOpacity>
+
       {/* Main Touch Radar Field */}
       <View style={styles.canvasContainer}>
         <AirTrafficCanvas
@@ -305,12 +384,59 @@ export default function GameScreen() {
       {/* Runway Legend Bottom Dock */}
       <View style={styles.bottomDock}>
         {legendItems.map((item) => (
-          <View style={styles.legendItem} key={item.type}>
+          <View style={styles.legendItem} key={item.types.join('-')}>
             <View style={[styles.legendIndicator, { backgroundColor: item.color }]} />
             <Text style={styles.legendText}>{item.label}</Text>
           </View>
         ))}
       </View>
+
+      {/* Campaign Map */}
+      <Modal visible={showSectorMap} transparent animationType="slide" onRequestClose={() => closeOverlay(setShowSectorMap)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.dialogCard, styles.campaignCard]}>
+            <Text style={styles.dialogTitle}>SKYLINE CAMPAIGN</Text>
+            <Text style={styles.campaignSummary}>
+              {stats.completedSectors.length}/{LEVELS.length} sectors cleared · {stats.unlockedLevels}/{LEVELS.length} unlocked
+            </Text>
+            <ScrollView style={styles.sectorScroll} contentContainerStyle={styles.sectorGrid} showsVerticalScrollIndicator={false}>
+              {LEVELS.map((sector, index) => {
+                const unlocked = index + 1 <= stats.unlockedLevels;
+                const cleared = stats.completedSectors.includes(index + 1);
+                const isActive = index === levelIndex;
+                const best = stats.sectorBestScores[String(index + 1)] ?? 0;
+                return (
+                  <TouchableOpacity
+                    key={sector.id}
+                    style={[
+                      styles.sectorCard,
+                      !unlocked && styles.sectorCardLocked,
+                      isActive && styles.sectorCardActive,
+                      cleared && styles.sectorCardCleared,
+                    ]}
+                    onPress={() => selectSector(index)}
+                    disabled={!unlocked}
+                    activeOpacity={0.74}
+                    accessibilityRole="button"
+                    accessibilityLabel={unlocked ? `Play sector ${sector.id}: ${sector.title}` : `Sector ${sector.id} locked`}
+                  >
+                    <View style={styles.sectorCardTopline}>
+                      <Text style={styles.sectorNumber}>{unlocked ? `S${String(sector.id).padStart(2, '0')}` : '🔒'}</Text>
+                      <Text style={styles.sectorStatus}>{cleared ? 'CLEARED' : isActive ? 'ACTIVE' : unlocked ? 'READY' : 'LOCKED'}</Text>
+                    </View>
+                    <Text style={styles.sectorTitle} numberOfLines={1}>{unlocked ? sector.title : 'Locked Sector'}</Text>
+                    <Text style={styles.sectorMission} numberOfLines={1}>{unlocked ? sector.missionLabel : `Unlock at ${sector.unlockScore}`}</Text>
+                    <Text style={styles.sectorBest}>BEST {best || '—'} · {sector.difficultyLabel}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.secondaryModalButton} onPress={() => closeOverlay(setShowSectorMap)} activeOpacity={0.8}>
+              <Text style={styles.secondaryModalButtonText}>BACK TO RADAR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Game Over Modal */}
       <Modal visible={showGameOver} transparent animationType="fade">
@@ -396,21 +522,23 @@ export default function GameScreen() {
               <Text style={styles.infoParagraph}>
                 🛬 <Text style={styles.bold}>Match Corridors:</Text>
                 {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Jets</Text> & <Text style={{ color: '#00E5FF' }}>Cyan Supersonic</Text> → Runway 34 (Center)
-                {'\n'}• <Text style={{ color: '#FFB300' }}>Amber Propellers</Text> → Runway 28 (Diagonal)
+                {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Fighters</Text> → Runway 34 (Center)
+                {'\n'}• <Text style={{ color: '#FFB300' }}>Amber Propellers & Cargo</Text> → Runway 28 (Diagonal)
                 {'\n'}• <Text style={{ color: '#00E676' }}>Green Seaplanes</Text> → Blue Lagoon Bay
-                {'\n'}• <Text style={{ color: '#C86BFF' }}>Violet Helicopters</Text> → Helipad H1 (Square pad)
+                {'\n'}• <Text style={{ color: '#C86BFF' }}>Violet Helicopters & Tiltrotors</Text> → Helipad H1 (Square pad)
+                {'\n'}• <Text style={{ color: '#FF5CD6' }}>Pink Airships</Text> → Mooring M1 (oval beacon)
               </Text>
               <Text style={styles.infoParagraph}>
                 🎯 <Text style={styles.bold}>One Aircraft, One Runway:</Text> Every aircraft has one fixed, color-matched destination. A plane cannot lock or land on any other course.
               </Text>
               <Text style={styles.infoParagraph}>
-                🚁 <Text style={styles.bold}>Helipad Clearance:</Text> Helicopters can approach H1 from any direction. Draw their route to the violet square pad; the landing lock turns green as soon as the line reaches the pad.
+                🚁 <Text style={styles.bold}>Vertical Clearance:</Text> Helicopters and tiltrotors can approach H1 from any direction. Airships can approach M1 from any direction. The landing lock turns green as soon as the line reaches the matching violet or pink destination.
               </Text>
               <Text style={styles.infoParagraph}>
                 ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.
               </Text>
               <Text style={styles.infoParagraph}>
-                🌍 <Text style={styles.bold}>Changing Sectors:</Text> Every completed sector moves to a new environment—coastal crosswind, alpine peak, then night superstorm. Traffic becomes denser within a sector and increases again at every new stage.
+                🌍 <Text style={styles.bold}>Campaign Sectors:</Text> Tap the sector badge above to open the 18-sector campaign map. Every sector combines a new terrain layout, fleet mix, traffic pressure, and an active mission such as crosswind, fuel priority, weather, low visibility, or restricted airspace.
               </Text>
               <Text style={styles.infoParagraph}>
                 ⚠️ <Text style={styles.bold}>Proximity Alarms:</Text> Keep aircraft separated! Yellow halos mean caution; flashing red halos signal imminent mid-air collision.
@@ -419,7 +547,7 @@ export default function GameScreen() {
 
             <TouchableOpacity
               style={styles.secondaryModalButton}
-              onPress={() => setShowInfoModal(false)}
+              onPress={() => closeOverlay(setShowInfoModal)}
               activeOpacity={0.8}
             >
               <Text style={styles.secondaryModalButtonText}>BACK TO RADAR</Text>
@@ -457,50 +585,23 @@ export default function GameScreen() {
               ))}
             </View>
             <View style={styles.achievementsList}>
-              <View style={styles.achievementRow}>
-                <Text style={styles.achievementIcon}>
-                  {stats.achievements.includes('land_10') ? '🎖️' : '🔒'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.achievementTitle}>Solo Clearance</Text>
-                  <Text style={styles.achievementDesc}>Land 10 aircraft safely</Text>
-                </View>
-              </View>
-
-              <View style={styles.achievementRow}>
-                <Text style={styles.achievementIcon}>
-                  {stats.achievements.includes('land_50') ? '🏆' : '🔒'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.achievementTitle}>Master Controller</Text>
-                  <Text style={styles.achievementDesc}>Land 50 total aircraft</Text>
-                </View>
-              </View>
-
-              <View style={styles.achievementRow}>
-                <Text style={styles.achievementIcon}>
-                  {stats.achievements.includes('combo_5') ? '⚡' : '🔒'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.achievementTitle}>Rapid Sequence</Text>
-                  <Text style={styles.achievementDesc}>Achieve a 5x landing combo</Text>
-                </View>
-              </View>
-
-              <View style={styles.achievementRow}>
-                <Text style={styles.achievementIcon}>
-                  {stats.achievements.includes('score_1000') ? '🌟' : '🔒'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.achievementTitle}>High Altitude Ace</Text>
-                  <Text style={styles.achievementDesc}>Score 1,000+ points in a session</Text>
-                </View>
-              </View>
+              {CAREER_ACHIEVEMENTS.map((achievement) => {
+                const achieved = stats.achievements.includes(achievement.id);
+                return (
+                  <View style={styles.achievementRow} key={achievement.id}>
+                    <Text style={styles.achievementIcon}>{achieved ? achievement.icon : '🔒'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.achievementTitle}>{achievement.title}</Text>
+                      <Text style={styles.achievementDesc}>{achievement.description}</Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
 
             <TouchableOpacity
               style={styles.secondaryModalButton}
-              onPress={() => setShowAchievementsModal(false)}
+              onPress={() => closeOverlay(setShowAchievementsModal)}
               activeOpacity={0.8}
             >
               <Text style={styles.secondaryModalButtonText}>CLOSE</Text>
@@ -637,6 +738,45 @@ const styles = StyleSheet.create({
     height: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
+  missionBanner: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    marginBottom: 5,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(115, 214, 255, 0.24)',
+    backgroundColor: 'rgba(7, 30, 45, 0.86)',
+  },
+  missionAccent: {
+    height: 24,
+    width: 3,
+    borderRadius: 3,
+    backgroundColor: '#00E5FF',
+    marginRight: 9,
+  },
+  missionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  missionTitle: {
+    color: '#B7F5FF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  missionDescription: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  missionChevron: {
+    color: '#70DFFF',
+    fontSize: 23,
+    lineHeight: 24,
+    marginLeft: 8,
+  },
   comboBadge: {
     backgroundColor: '#FF3D71',
     paddingHorizontal: 8,
@@ -734,6 +874,86 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
     shadowRadius: 15,
+  },
+  campaignCard: {
+    maxWidth: 402,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  campaignSummary: {
+    color: 'rgba(205, 241, 249, 0.74)',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 7,
+    marginBottom: 12,
+  },
+  sectorScroll: {
+    width: '100%',
+    maxHeight: 430,
+  },
+  sectorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  sectorCard: {
+    width: '48.5%',
+    minHeight: 92,
+    padding: 9,
+    backgroundColor: 'rgba(5, 24, 38, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(91, 203, 233, 0.28)',
+    borderRadius: 10,
+  },
+  sectorCardLocked: {
+    opacity: 0.48,
+    backgroundColor: 'rgba(18, 25, 34, 0.92)',
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  sectorCardActive: {
+    borderWidth: 2,
+    borderColor: '#00E5FF',
+    backgroundColor: 'rgba(0, 82, 104, 0.46)',
+  },
+  sectorCardCleared: {
+    borderColor: 'rgba(0, 230, 118, 0.58)',
+  },
+  sectorCardTopline: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sectorNumber: {
+    color: '#B7F5FF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+  },
+  sectorStatus: {
+    color: '#82dff1',
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 0.55,
+  },
+  sectorTitle: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  sectorMission: {
+    color: '#FFCF6D',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.35,
+    marginTop: 4,
+  },
+  sectorBest: {
+    color: 'rgba(255,255,255,0.52)',
+    fontSize: 8,
+    marginTop: 5,
+    fontWeight: '700',
   },
   dialogAlertIcon: {
     marginBottom: 8,

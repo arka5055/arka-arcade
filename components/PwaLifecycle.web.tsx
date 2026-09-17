@@ -5,24 +5,27 @@ export function PwaLifecycle() {
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
     let reloadingForUpdate = false;
-    const reloadForUpdate = () => {
-      if (reloadingForUpdate) return;
-      reloadingForUpdate = true;
-      window.location.reload();
+    let registrationRef: ServiceWorkerRegistration | undefined;
+    const announceUpdate = () => {
+      window.dispatchEvent(new Event('skyline-pwa-update-ready'));
     };
     const watchInstallingWorker = (worker: ServiceWorker) => {
       worker.addEventListener('statechange', () => {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-          reloadForUpdate();
+          announceUpdate();
         }
       });
     };
-    const onControllerChange = () => reloadForUpdate();
+    const onControllerChange = () => {
+      if (!reloadingForUpdate) return;
+      window.location.reload();
+    };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
     navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
       .then(async (registration) => {
-        if (registration.waiting) reloadForUpdate();
+        registrationRef = registration;
+        if (registration.waiting) announceUpdate();
         if (registration.installing) watchInstallingWorker(registration.installing);
         registration.addEventListener('updatefound', () => {
           if (registration.installing) watchInstallingWorker(registration.installing);
@@ -34,7 +37,18 @@ export function PwaLifecycle() {
         // Offline caching is an enhancement; gameplay remains available over the network.
       });
 
-    return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    const applyUpdate = () => {
+      const waiting = registrationRef?.waiting;
+      if (!waiting || reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+    };
+    window.addEventListener('skyline-apply-pwa-update', applyUpdate);
+
+    return () => {
+      window.removeEventListener('skyline-apply-pwa-update', applyUpdate);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
   }, []);
 
   useEffect(() => {

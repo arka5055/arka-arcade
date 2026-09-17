@@ -1,4 +1,4 @@
-const CACHE = 'skyline-signal-1789679792950';
+const CACHE = 'skyline-signal-1789682752199';
 const APP_SHELL = [
   '/', '/manifest.json',
   '/scenery/airport.jpg', '/scenery/crosswind-coast.jpg', '/scenery/peak-rush-hour.jpg', '/scenery/superstorm-radar.jpg',
@@ -7,7 +7,6 @@ const APP_SHELL = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -15,6 +14,12 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
   );
   self.clients.claim();
+});
+
+// A running game chooses when a new release takes control. This avoids losing an
+// active approach because a background PWA update happens mid-session.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {

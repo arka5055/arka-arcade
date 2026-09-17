@@ -1,4 +1,4 @@
-import type { Point, RunwayZone } from '@/constants/game-types';
+import { isVerticalDestination, type Point, type RunwayZone } from '../constants/game-types';
 
 export interface LandingRouteValidation {
   isLocked: boolean;
@@ -31,8 +31,9 @@ export function validateLandingRoute(
 ): LandingRouteValidation {
   // A touch-controlled game needs a generous entry window. The physical touchdown test
   // remains strict later; this only validates that the player's intended approach is sound.
-  const captureRadius = runway.touchdownRadius + (runway.type === 'helipad' ? 48 : 64);
-  const headingTolerance = runway.type === 'helipad'
+  const verticalDestination = isVerticalDestination(runway);
+  const captureRadius = runway.touchdownRadius + (verticalDestination ? 48 : 64);
+  const headingTolerance = verticalDestination
     ? Math.PI
     : Math.min(Math.PI, runway.headingTolerance + 0.22);
   if (route.length === 0) {
@@ -58,7 +59,7 @@ export function validateLandingRoute(
   const endpointDistance = Math.hypot(endpoint.x - runway.startX, endpoint.y - runway.startY);
   const finalHeading = Math.atan2(endpoint.y - previousPoint.y, endpoint.x - previousPoint.x);
   const headingDifference = shortestAngleDifference(finalHeading, runway.heading);
-  const isHelipad = runway.type === 'helipad';
+  const isHelipad = verticalDestination;
   const thresholdProjection = (endpoint.x - runway.startX) * Math.cos(runway.heading)
     + (endpoint.y - runway.startY) * Math.sin(runway.heading);
   // A path may finish just past the threshold for touch tolerance,

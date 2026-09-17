@@ -30,3 +30,18 @@
 - [x] Show only destinations active in the current sector, improve control target sizes, and use one focused conflict overlay.
 - [x] Use one authoritative score value for the HUD, game-over record, high score, and leaderboard.
 - [ ] Publish and verify the reviewed PWA release on GitHub Pages.
+
+## Original-game fidelity audit
+
+- [x] Benchmark documented Planes Control rules, feature breadth, missions, progression, and presentation against first-party sources.
+- [x] Audit Skyline Signal PWA touch mechanics, aircraft/destination model, stage content, feedback, accessibility, and PWA lifecycle.
+- [x] Produce a source-cited Hebrew fidelity scorecard and a three-horizon parity roadmap.
+
+## Comprehensive parity upgrade
+
+- [x] Define an original 18-sector campaign with explicit difficulty, unlock-score, map-layout, fleet, and mission data.
+- [x] Expand the fleet into distinct tactical roles: fighter, heavy cargo, tiltrotor, and airship mooring, alongside the existing aircraft.
+- [x] Connect active weather, terrain, moving-object, wildfire, and fuel-priority rules to canvas physics and player feedback.
+- [x] Add a selectable, locked/unlocked campaign map and sector achievements to the PWA interface.
+- [x] Improve tactical readability, semantic status announcements, and safe PWA update handling.
+- [x] Validate the complete campaign and publish it to the existing permanent PWA URL.
