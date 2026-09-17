@@ -29,8 +29,14 @@ import {
 } from '../lib/route-editing';
 import { canSpawnInSector, getActiveAircraftBudget } from '../lib/traffic-director';
 import { clampRadarLabel, shouldShowFlightTag } from '../lib/radar-ui';
+import { RELEASE_LABEL, RELEASE_VERSION } from '../constants/release';
 
 describe('Aircraft Definitions', () => {
+  it('exposes the current release identifier inside the game', () => {
+    expect(RELEASE_VERSION).toBe('v1.1.1');
+    expect(RELEASE_LABEL).toBe('BUILD v1.1.1');
+  });
+
   it('defines valid specifications for each aircraft class', () => {
     const types: AircraftType[] = ['jet', 'propeller', 'supersonic', 'seaplane', 'helicopter'];
     types.forEach((t) => {

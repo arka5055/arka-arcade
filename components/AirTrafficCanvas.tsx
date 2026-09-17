@@ -38,6 +38,7 @@ import {
   restoreRouteSnapshot,
   type RouteSnapshot,
 } from '@/lib/route-editing';
+import { RELEASE_LABEL } from '@/constants/release';
 import * as Haptics from 'expo-haptics';
 
 // Served independently and preloaded by app/+html.tsx, so flight controls start
@@ -550,6 +551,22 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.fillStyle = shadow;
       ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
     });
+    ctx.restore();
+
+    // The build marker lives inside the radar, not the optional app header, so a player can
+    // confirm the active PWA release even when Safari/PWA chrome has collapsed the top UI.
+    ctx.save();
+    ctx.font = '800 8px -apple-system, system-ui, sans-serif';
+    const releaseWidth = ctx.measureText(RELEASE_LABEL).width + 12;
+    const releaseX = w - releaseWidth - 9;
+    ctx.fillStyle = 'rgba(2, 14, 23, 0.86)';
+    ctx.fillRect(releaseX, 9, releaseWidth, 15);
+    ctx.strokeStyle = 'rgba(102, 241, 202, 0.72)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(releaseX, 9, releaseWidth, 15);
+    ctx.fillStyle = '#a5f7d0';
+    ctx.textAlign = 'center';
+    ctx.fillText(RELEASE_LABEL, releaseX + releaseWidth / 2, 20);
     ctx.restore();
 
     // Sandy coast shoreline border

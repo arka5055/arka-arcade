@@ -21,8 +21,7 @@ import {
 import { sounds } from '@/lib/sound-controller';
 import { loadGameStats, saveGameStats, GameStats, DEFAULT_STATS } from '@/lib/game-storage';
 import * as Haptics from 'expo-haptics';
-
-const RELEASE_VERSION = 'v1.1.0';
+import { RELEASE_VERSION } from '@/constants/release';
 
 export default function GameScreen() {
   const [levelIndex, setLevelIndex] = useState(0);
