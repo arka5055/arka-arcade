@@ -33,8 +33,8 @@ import { RELEASE_LABEL, RELEASE_VERSION } from '../constants/release';
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.1.1');
-    expect(RELEASE_LABEL).toBe('BUILD v1.1.1');
+    expect(RELEASE_VERSION).toBe('v1.1.2');
+    expect(RELEASE_LABEL).toBe('BUILD v1.1.2');
   });
 
   it('defines valid specifications for each aircraft class', () => {

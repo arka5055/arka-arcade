@@ -4,9 +4,37 @@ import { useEffect } from 'react';
 export function PwaLifecycle() {
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {
-      // Offline caching is an enhancement; gameplay remains available over the network.
-    });
+    let reloadingForUpdate = false;
+    const reloadForUpdate = () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      window.location.reload();
+    };
+    const watchInstallingWorker = (worker: ServiceWorker) => {
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          reloadForUpdate();
+        }
+      });
+    };
+    const onControllerChange = () => reloadForUpdate();
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
+    navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
+      .then(async (registration) => {
+        if (registration.waiting) reloadForUpdate();
+        if (registration.installing) watchInstallingWorker(registration.installing);
+        registration.addEventListener('updatefound', () => {
+          if (registration.installing) watchInstallingWorker(registration.installing);
+        });
+        // Check on every launch rather than waiting for the browser's periodic SW update check.
+        await registration.update();
+      })
+      .catch(() => {
+        // Offline caching is an enhancement; gameplay remains available over the network.
+      });
+
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
   }, []);
 
   useEffect(() => {
