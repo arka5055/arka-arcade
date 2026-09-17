@@ -22,6 +22,8 @@ import { sounds } from '@/lib/sound-controller';
 import { loadGameStats, saveGameStats, GameStats, DEFAULT_STATS } from '@/lib/game-storage';
 import * as Haptics from 'expo-haptics';
 
+const RELEASE_VERSION = 'v1.1.0';
+
 export default function GameScreen() {
   const [levelIndex, setLevelIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -189,7 +191,12 @@ export default function GameScreen() {
       {/* Top Header Flight Deck HUD */}
       <View style={styles.topBar}>
         <View style={styles.titleGroup}>
-          <Text style={styles.appName}>SKYLINE SIGNAL</Text>
+          <View style={styles.brandLine}>
+            <Text style={styles.appName}>SKYLINE SIGNAL</Text>
+            <View style={styles.versionBadge} accessibilityLabel={`Game version ${RELEASE_VERSION}`}>
+              <Text style={styles.versionText}>{RELEASE_VERSION}</Text>
+            </View>
+          </View>
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>SECTOR {levelIndex + 1}/{LEVELS.length} · {trafficLoad} TRAFFIC</Text>
           </View>
@@ -529,12 +536,31 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+  brandLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   appName: {
     color: '#00E5FF',
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 1.2,
     fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-CondensedBold' : 'sans-serif-medium',
+  },
+  versionBadge: {
+    backgroundColor: 'rgba(0, 229, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.32)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  versionText: {
+    color: '#8DECF5',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.35,
   },
   levelBadge: {
     alignSelf: 'flex-start',
