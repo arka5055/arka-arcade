@@ -8,7 +8,7 @@ import {
 } from '../lib/approach-routing';
 import { preservePlayerDrawnRoute } from '../lib/player-routing';
 import { getDriftingCloudShadows } from '../lib/scenery-effects';
-import { validateLandingRoute } from '../lib/landing-route-validation';
+import { routeThroughLandingCapture, validateLandingRoute } from '../lib/landing-route-validation';
 import {
   getDynamicSpawnInterval,
   getStageEnvironment,
@@ -21,7 +21,13 @@ import { AIRCRAFT_PERFORMANCE, getAircraftSafetyRadius, getPerformanceOrdering }
 import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from '../lib/landing-sequence';
 import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor } from '../lib/traffic-conflicts';
-import { blendLandingHeading, isForwardAlongRunway } from '../lib/landing-motion';
+import {
+  blendLandingHeading,
+  canBeginForwardRunwayLanding,
+  getFinalGlideAimPoint,
+  getRunwayProgress,
+  isForwardAlongRunway,
+} from '../lib/landing-motion';
 import {
   cloneRouteSnapshot,
   hasRouteEditIntent,
@@ -43,8 +49,8 @@ import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '../lib/campaign'
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.2.1');
-    expect(RELEASE_LABEL).toBe('BUILD v1.2.1');
+    expect(RELEASE_VERSION).toBe('v1.2.3');
+    expect(RELEASE_LABEL).toBe('BUILD v1.2.3');
   });
 
   it('defines valid specifications for each aircraft class', () => {
@@ -405,13 +411,14 @@ describe('Assisted runway approach', () => {
     expect(valid.isLocked).toBe(true);
   });
 
-  it('exposes a large visible gate while keeping only a tiny post-threshold overshoot', () => {
+  it('captures a valid line crossing even when the finger continues past the gate', () => {
     const valid = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 120 }], runway);
     expect(valid.approachGateLength).toBeGreaterThan(140);
     expect(valid.approachGateHalfWidth).toBeGreaterThan(60);
     const overshot = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 218 }], runway);
-    expect(overshot.isOnApproachSide).toBe(false);
-    expect(overshot.isLocked).toBe(false);
+    expect(overshot.isOnApproachSide).toBe(true);
+    expect(overshot.isLocked).toBe(true);
+    expect(overshot.capturePoint!.y).toBeLessThan(200);
   });
 
   it('allows a forgiving endpoint just beyond the threshold without accepting a runway overshoot', () => {
@@ -433,15 +440,15 @@ describe('Assisted runway approach', () => {
     expect(invalid.isLocked).toBe(false);
   });
 
-  it('does not clear a path whose end has already crossed the runway threshold', () => {
-    const overshot = validateLandingRoute(
-      { x: 200, y: 40 },
-      [{ x: 200, y: 120 }, { x: 200, y: 222 }],
-      runway,
-    );
-    expect(overshot.headingDifference).toBeCloseTo(0, 6);
-    expect(overshot.thresholdProjection).toBeGreaterThan(4);
-    expect(overshot.isLocked).toBe(false);
+  it('trims only the unneeded tail after a player line enters the correct corridor', () => {
+    const original = [{ x: 200, y: 120 }, { x: 200, y: 222 }];
+    const validation = validateLandingRoute({ x: 200, y: 40 }, original, runway);
+    const captured = routeThroughLandingCapture(original, validation);
+    expect(validation.headingDifference).toBeCloseTo(0, 6);
+    expect(validation.isLocked).toBe(true);
+    expect(captured).toHaveLength(1);
+    expect(captured[0].y).toBeLessThan(200);
+    expect(original[1].y).toBe(222);
   });
 
   it('blends into the runway direction and never reverses along the landing track', () => {
@@ -451,6 +458,14 @@ describe('Assisted runway approach', () => {
     expect(blendLandingHeading(entryHeading, runwayHeading, 1)).toBeCloseTo(runwayHeading, 6);
     expect(isForwardAlongRunway(200, 160, 200, 198, runwayHeading)).toBe(true);
     expect(isForwardAlongRunway(200, 202, 200, 198, runwayHeading)).toBe(false);
+  });
+
+  it('aims the cleared final glide beyond the threshold without allowing a reverse landing entry', () => {
+    const aim = getFinalGlideAimPoint(runway);
+    expect(getRunwayProgress(aim, runway)).toBeGreaterThan(0);
+    expect(canBeginForwardRunwayLanding({ x: 200, y: 160 }, runway)).toBe(true);
+    expect(canBeginForwardRunwayLanding({ x: 200, y: 205 }, runway)).toBe(false);
+    expect(isForwardAlongRunway(200, 160, aim.x, aim.y, runway.heading)).toBe(true);
   });
 
   it('locks a helicopter route when it reaches the H1 pad from any direction', () => {

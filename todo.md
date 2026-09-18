@@ -45,3 +45,15 @@
 - [x] Add a selectable, locked/unlocked campaign map and sector achievements to the PWA interface.
 - [x] Improve tactical readability, semantic status announcements, and safe PWA update handling.
 - [x] Validate the complete campaign and publish it to the existing permanent PWA URL.
+
+## Landing handoff reliability (v1.2.2)
+
+- [x] Replace threshold-centre steering with a continuous final-glide aim point beyond the runway threshold.
+- [x] Block staged landing animation from starting after a runway threshold overshoot.
+- [x] Add regression coverage for forward-only final glide and touchdown entry.
+
+## Anchor-free landing capture (v1.2.3)
+
+- [x] Arm landing when a player line crosses the matching coloured approach corridor, rather than requiring release at an anchor point.
+- [x] Preserve the player route up to the first valid corridor crossing and discard only the excess line beyond it.
+- [x] Show the exact captured crossing point during the active green route preview.

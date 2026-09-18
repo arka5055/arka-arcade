@@ -18,7 +18,7 @@ import {
   getApproachEntry,
 } from '@/lib/approach-routing';
 import { preservePlayerDrawnRoute } from '@/lib/player-routing';
-import { validateLandingRoute } from '@/lib/landing-route-validation';
+import { routeThroughLandingCapture, validateLandingRoute } from '@/lib/landing-route-validation';
 import { getDriftingCloudShadows } from '@/lib/scenery-effects';
 import {
   getDynamicSpawnInterval,
@@ -31,7 +31,12 @@ import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
-import { blendLandingHeading, isForwardAlongRunway } from '@/lib/landing-motion';
+import {
+  blendLandingHeading,
+  canBeginForwardRunwayLanding,
+  getFinalGlideAimPoint,
+  isForwardAlongRunway,
+} from '@/lib/landing-motion';
 import { canSpawnInSector } from '@/lib/traffic-director';
 import { clampRadarLabel, shouldShowFlightTag } from '@/lib/radar-ui';
 import {
@@ -472,7 +477,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ? getAssignedRunway(p.type, runways)
         : undefined;
       if (clearedDestination) {
-        p.targetHeading = Math.atan2(clearedDestination.startY - p.y, clearedDestination.startX - p.x);
+        const glideAimPoint = getFinalGlideAimPoint(clearedDestination);
+        p.targetHeading = Math.atan2(glideAimPoint.y - p.y, glideAimPoint.x - p.x);
       }
 
       // Smooth turn towards target heading
@@ -525,10 +531,14 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           routeComplete: p.path.length === 0,
           insideCapture: isInsidePhysicalTouchdown(p, assignedRunway),
           headingDifference: angleDiff,
-          headingTolerance: assignedRunway.headingTolerance,
+          headingTolerance: Math.min(Math.PI, assignedRunway.headingTolerance + 0.55),
           isHelipad: isVerticalDestination(assignedRunway),
         });
-        if (authorized) {
+        // Do not freeze the staged landing animation after the aircraft has crossed the
+        // threshold. It must still be in front of it so every animated position advances.
+        const isForwardEntry = isVerticalDestination(assignedRunway)
+          || canBeginForwardRunwayLanding(p, assignedRunway);
+        if (authorized && isForwardEntry) {
           const incomingHeading = p.heading;
           p.isLanding = true;
           p.path = [];
@@ -1251,7 +1261,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       activeDrawPathRef.current.forEach(pt => ctx.lineTo(pt.x, pt.y));
       ctx.stroke();
       if (isLandingLocked) {
-        const endpoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+        const endpoint = landingValidation?.capturePoint
+          ?? activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
         ctx.setLineDash([]);
         ctx.fillStyle = '#00E676';
         ctx.beginPath();
@@ -1263,7 +1274,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.arc(endpoint.x, endpoint.y, 12, 0, Math.PI * 2);
         ctx.stroke();
         ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        const lockText = '✓ CLEARED TO LAND';
+        const lockText = '✓ GATE CAPTURED';
         const lockWidth = ctx.measureText(lockText).width + 14;
         ctx.fillStyle = 'rgba(0, 81, 55, 0.94)';
         ctx.fillRect(endpoint.x - lockWidth / 2, endpoint.y - 31, lockWidth, 17);
@@ -1281,8 +1292,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           const targetName = selectedRunway.id === 'mooring-m1' ? 'M1' : target;
           const hint = draftHazard
             ? `AVOID ${draftHazard.label}`
-            : !landingValidation.isInsideCapture
-            ? `END IN ${targetName} GATE`
+            : !landingValidation.isInsideApproachGate
+            ? `CROSS ${targetName} GATE`
             : !landingValidation.isOnApproachSide
               ? 'END BEFORE THRESHOLD'
               : !landingValidation.isHeadingAligned
@@ -2053,18 +2064,22 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const routeStart = routeStartPointRef.current ?? { x: plane.x, y: plane.y };
         const playerRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
         if (playerRoute.length > 0) {
-          // Player intent wins: retain each point drawn with the finger, without replacing it
-          // with an automatic runway approach. Landing capture still validates the final angle.
-          plane.path = playerRoute;
           const matchingRunway = getAssignedRunway(plane.type, runwaysRef.current);
           const hazard = routeIntersectsMissionHazard(
             routeStart,
             playerRoute,
             getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
           );
-          plane.landingCleared = Boolean(matchingRunway
-            && !hazard
-            && validateLandingRoute(routeStart, playerRoute, matchingRunway).isLocked);
+          const landingValidation = matchingRunway
+            ? validateLandingRoute(routeStart, playerRoute, matchingRunway)
+            : undefined;
+          // A crossing of the correct coloured corridor is the player's intentional handoff.
+          // Keep the player line up to that exact crossing, rather than forcing them to lift
+          // their finger on a tiny anchor point or replacing the path with an automatic curve.
+          plane.path = landingValidation?.isLocked
+            ? routeThroughLandingCapture(playerRoute, landingValidation)
+            : playerRoute;
+          plane.landingCleared = Boolean(!hazard && landingValidation?.isLocked);
           sounds.playSelect();
         } else if (routeSnapshotRef.current) {
           const restored = restoreRouteSnapshot(routeSnapshotRef.current);
