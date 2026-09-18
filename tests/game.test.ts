@@ -43,8 +43,8 @@ import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '../lib/campaign'
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.2.0');
-    expect(RELEASE_LABEL).toBe('BUILD v1.2.0');
+    expect(RELEASE_VERSION).toBe('v1.2.1');
+    expect(RELEASE_LABEL).toBe('BUILD v1.2.1');
   });
 
   it('defines valid specifications for each aircraft class', () => {
@@ -391,6 +391,27 @@ describe('Assisted runway approach', () => {
     expect(valid.isHeadingAligned).toBe(true);
     expect(valid.isOnApproachSide).toBe(true);
     expect(valid.isLocked).toBe(true);
+  });
+
+  it('locks a broad colour-matched approach gate without demanding a pixel-perfect endpoint', () => {
+    const valid = validateLandingRoute(
+      { x: 110, y: 20 },
+      [{ x: 120, y: 35 }, { x: 145, y: 70 }],
+      runway,
+    );
+    expect(valid.isInsideCapture).toBe(false);
+    expect(valid.isInsideApproachGate).toBe(true);
+    expect(valid.isHeadingAligned).toBe(true);
+    expect(valid.isLocked).toBe(true);
+  });
+
+  it('exposes a large visible gate while keeping only a tiny post-threshold overshoot', () => {
+    const valid = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 120 }], runway);
+    expect(valid.approachGateLength).toBeGreaterThan(140);
+    expect(valid.approachGateHalfWidth).toBeGreaterThan(60);
+    const overshot = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 218 }], runway);
+    expect(overshot.isOnApproachSide).toBe(false);
+    expect(overshot.isLocked).toBe(false);
   });
 
   it('allows a forgiving endpoint just beyond the threshold without accepting a runway overshoot', () => {

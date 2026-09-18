@@ -464,6 +464,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       }
 
+      // A green player-drawn route has reached the matching final-approach gate. Once every
+      // point in that exact route is flown, capture the aircraft for the final glide to the
+      // threshold rather than letting it coast past a valid landing line. This changes no
+      // player waypoint; it simply makes the accepted landing intent reliable.
+      const clearedDestination = p.landingCleared && p.path.length === 0
+        ? getAssignedRunway(p.type, runways)
+        : undefined;
+      if (clearedDestination) {
+        p.targetHeading = Math.atan2(clearedDestination.startY - p.y, clearedDestination.startX - p.x);
+      }
+
       // Smooth turn towards target heading
       let diff = p.targetHeading - p.heading;
       while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1192,20 +1203,38 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       // The green capture window is deliberately large and only appears while the player is
       // drawing. It explains exactly where a valid route should end without altering the route.
       if (selectedRunway && landingValidation) {
-        const isHelipad = selectedRunway.type === 'helipad';
+        const isVertical = isVerticalDestination(selectedRunway);
         const guideColor = draftHazard ? '#FF3D71' : isLandingLocked ? '#00E676' : selectedRunway.color;
-        const approachEntry = getApproachEntry(selectedRunway, Math.min(104, landingValidation.captureRadius + 14));
+        const approachEntry = getApproachEntry(selectedRunway, landingValidation.approachGateLength);
         const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
         ctx.save();
         ctx.strokeStyle = guideColor;
-        ctx.fillStyle = `${guideColor}18`;
+        ctx.fillStyle = `${guideColor}22`;
         ctx.lineWidth = isLandingLocked ? 3 : 2;
         ctx.setLineDash([6, 5]);
         ctx.beginPath();
         ctx.arc(selectedRunway.startX, selectedRunway.startY, landingValidation.captureRadius * pulse, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        if (!isHelipad) {
+        if (!isVertical) {
+          const lateralX = -Math.sin(selectedRunway.heading);
+          const lateralY = Math.cos(selectedRunway.heading);
+          // The broad bar is the actual finger-friendly handoff gate. End a line anywhere
+          // across it and the final glide is accepted; the game never redraws that line.
+          ctx.lineWidth = isLandingLocked ? 8 : 6;
+          ctx.globalAlpha = isLandingLocked ? 0.82 : 0.48;
+          ctx.beginPath();
+          ctx.moveTo(
+            approachEntry.x - lateralX * landingValidation.approachGateHalfWidth,
+            approachEntry.y - lateralY * landingValidation.approachGateHalfWidth,
+          );
+          ctx.lineTo(
+            approachEntry.x + lateralX * landingValidation.approachGateHalfWidth,
+            approachEntry.y + lateralY * landingValidation.approachGateHalfWidth,
+          );
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = isLandingLocked ? 3 : 2;
           ctx.beginPath();
           ctx.moveTo(approachEntry.x, approachEntry.y);
           ctx.lineTo(selectedRunway.startX, selectedRunway.startY);
@@ -1249,15 +1278,16 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           const target = selectedRunway.id === 'runway-main' ? 'R34'
             : selectedRunway.id === 'runway-diagonal' ? 'R28'
               : selectedRunway.id === 'helipad-h1' ? 'H1' : 'BAY';
+          const targetName = selectedRunway.id === 'mooring-m1' ? 'M1' : target;
           const hint = draftHazard
             ? `AVOID ${draftHazard.label}`
             : !landingValidation.isInsideCapture
-            ? `ENTER ${target} ZONE`
+            ? `END IN ${targetName} GATE`
             : !landingValidation.isOnApproachSide
-              ? 'STOP BEFORE THRESHOLD'
+              ? 'END BEFORE THRESHOLD'
               : !landingValidation.isHeadingAligned
-                ? 'ALIGN WITH DASHED GUIDE'
-                : `DRAW TO ${target}`;
+                ? 'USE THE GLOWING GATE'
+                : `DRAW TO ${targetName}`;
           ctx.setLineDash([]);
           ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
           ctx.font = '800 9px -apple-system, system-ui, sans-serif';
