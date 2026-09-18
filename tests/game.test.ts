@@ -8,7 +8,11 @@ import {
 } from '../lib/approach-routing';
 import { preservePlayerDrawnRoute } from '../lib/player-routing';
 import { getDriftingCloudShadows } from '../lib/scenery-effects';
-import { routeThroughLandingCapture, validateLandingRoute } from '../lib/landing-route-validation';
+import {
+  getLandingGateEndpoints,
+  routeThroughLandingCapture,
+  validateLandingRoute,
+} from '../lib/landing-route-validation';
 import {
   getDynamicSpawnInterval,
   getStageEnvironment,
@@ -49,8 +53,8 @@ import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '../lib/campaign'
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.2.3');
-    expect(RELEASE_LABEL).toBe('BUILD v1.2.3');
+    expect(RELEASE_VERSION).toBe('v1.2.4');
+    expect(RELEASE_LABEL).toBe('BUILD v1.2.4');
   });
 
   it('defines valid specifications for each aircraft class', () => {
@@ -402,7 +406,7 @@ describe('Assisted runway approach', () => {
   it('locks a broad colour-matched approach gate without demanding a pixel-perfect endpoint', () => {
     const valid = validateLandingRoute(
       { x: 110, y: 20 },
-      [{ x: 120, y: 35 }, { x: 145, y: 70 }],
+      [{ x: 150, y: 80 }, { x: 300, y: 300 }],
       runway,
     );
     expect(valid.isInsideCapture).toBe(false);
@@ -413,8 +417,8 @@ describe('Assisted runway approach', () => {
 
   it('captures a valid line crossing even when the finger continues past the gate', () => {
     const valid = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 120 }], runway);
-    expect(valid.approachGateLength).toBeGreaterThan(140);
-    expect(valid.approachGateHalfWidth).toBeGreaterThan(60);
+    expect(valid.approachGateLength).toBeGreaterThan(70);
+    expect(valid.approachGateHalfWidth).toBeGreaterThan(40);
     const overshot = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 218 }], runway);
     expect(overshot.isOnApproachSide).toBe(true);
     expect(overshot.isLocked).toBe(true);
@@ -440,6 +444,17 @@ describe('Assisted runway approach', () => {
     expect(invalid.isLocked).toBe(false);
   });
 
+  it('does not lock a route that runs near the runway but never crosses its finite gate', () => {
+    const offRunway = validateLandingRoute(
+      { x: 80, y: 100 },
+      [{ x: 140, y: 160 }, { x: 150, y: 260 }],
+      runway,
+    );
+    expect(offRunway.isInsideApproachGate).toBe(false);
+    expect(offRunway.capturePoint).toBeUndefined();
+    expect(offRunway.isLocked).toBe(false);
+  });
+
   it('trims only the unneeded tail after a player line enters the correct corridor', () => {
     const original = [{ x: 200, y: 120 }, { x: 200, y: 222 }];
     const validation = validateLandingRoute({ x: 200, y: 40 }, original, runway);
@@ -449,6 +464,38 @@ describe('Assisted runway approach', () => {
     expect(captured).toHaveLength(1);
     expect(captured[0].y).toBeLessThan(200);
     expect(original[1].y).toBe(222);
+  });
+
+  it('passes the practical diagonal-runway playtest and rejects a parallel near-miss', () => {
+    const diagonal: RunwayZone = {
+      id: 'diagonal-playtest', name: 'R28', startX: 120, startY: 130, endX: 350, endY: 310,
+      allowedTypes: ['propeller'], heading: Math.atan2(180, 230), headingTolerance: 0.85,
+      touchdownRadius: 34, color: '#FFB300', type: 'runway',
+    };
+    const gate = getLandingGateEndpoints(diagonal);
+    const forwardX = Math.cos(diagonal.heading);
+    const forwardY = Math.sin(diagonal.heading);
+    const lateralX = -Math.sin(diagonal.heading);
+    const lateralY = Math.cos(diagonal.heading);
+    const validStart = { x: gate.center.x - forwardX * 130, y: gate.center.y - forwardY * 130 };
+    const validEnd = { x: gate.center.x + forwardX * 90, y: gate.center.y + forwardY * 90 };
+    const valid = validateLandingRoute(validStart, [validEnd], diagonal);
+    expect(valid.isLocked).toBe(true);
+    expect(valid.capturePoint).toBeDefined();
+
+    const gateHalfWidth = Math.hypot(gate.first.x - gate.center.x, gate.first.y - gate.center.y);
+    const outsideOffset = gateHalfWidth + 24;
+    const missStart = {
+      x: validStart.x + lateralX * outsideOffset,
+      y: validStart.y + lateralY * outsideOffset,
+    };
+    const missEnd = {
+      x: validEnd.x + lateralX * outsideOffset,
+      y: validEnd.y + lateralY * outsideOffset,
+    };
+    const nearMiss = validateLandingRoute(missStart, [missEnd], diagonal);
+    expect(nearMiss.isLocked).toBe(false);
+    expect(nearMiss.capturePoint).toBeUndefined();
   });
 
   it('blends into the runway direction and never reverses along the landing track', () => {

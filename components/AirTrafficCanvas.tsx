@@ -1210,8 +1210,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         : undefined;
       const isLandingLocked = Boolean(landingValidation?.isLocked && !draftHazard);
 
-      // The green capture window is deliberately large and only appears while the player is
-      // drawing. It explains exactly where a valid route should end without altering the route.
+      // Draw the finite handoff gate rather than a broad circular target. The player only has
+      // to cross this bar in the correct direction; nearby points and parallel lines stay invalid.
       if (selectedRunway && landingValidation) {
         const isVertical = isVerticalDestination(selectedRunway);
         const guideColor = draftHazard ? '#FF3D71' : isLandingLocked ? '#00E676' : selectedRunway.color;
@@ -1219,11 +1219,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
         ctx.save();
         ctx.strokeStyle = guideColor;
-        ctx.fillStyle = `${guideColor}22`;
+        ctx.fillStyle = `${guideColor}18`;
         ctx.lineWidth = isLandingLocked ? 3 : 2;
         ctx.setLineDash([6, 5]);
         ctx.beginPath();
-        ctx.arc(selectedRunway.startX, selectedRunway.startY, landingValidation.captureRadius * pulse, 0, Math.PI * 2);
+        ctx.arc(
+          selectedRunway.startX,
+          selectedRunway.startY,
+          (selectedRunway.touchdownRadius + 10) * pulse,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
         ctx.stroke();
         if (!isVertical) {

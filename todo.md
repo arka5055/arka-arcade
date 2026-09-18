@@ -57,3 +57,9 @@
 - [x] Arm landing when a player line crosses the matching coloured approach corridor, rather than requiring release at an anchor point.
 - [x] Preserve the player route up to the first valid corridor crossing and discard only the excess line beyond it.
 - [x] Show the exact captured crossing point during the active green route preview.
+
+## Finite-gate landing QA fix (v1.2.4)
+
+- [x] Replace broad corridor-area capture with an exact finite approach-gate intersection.
+- [x] Reject off-runway and parallel near-miss routes while retaining one-swipe gate crossing.
+- [x] Run independent QA scenarios for R34, diagonal R28, vertical landing, overdraw, and nearby false positives.
