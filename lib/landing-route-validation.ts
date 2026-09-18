@@ -57,9 +57,11 @@ function getRunwayCoordinates(point: Point, runway: RunwayZone) {
 export function getLandingGateGeometry(runway: RunwayZone): LandingGateGeometry {
   if (isVerticalDestination(runway)) {
     return {
-      captureRadius: runway.touchdownRadius + 52,
-      approachGateLength: runway.touchdownRadius + 52,
-      approachGateHalfWidth: runway.touchdownRadius + 52,
+      // Vertical arrivals should visibly meet the pad itself. A small finger-friendly halo is
+      // enough; the previous 52px expansion made a green "landing" point look detached from H1.
+      captureRadius: runway.touchdownRadius + 8,
+      approachGateLength: runway.touchdownRadius + 8,
+      approachGateHalfWidth: runway.touchdownRadius + 8,
       maxThresholdOvershoot: runway.touchdownRadius + 14,
     };
   }

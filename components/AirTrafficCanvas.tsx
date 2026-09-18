@@ -47,6 +47,7 @@ import {
 } from '@/lib/route-editing';
 import { RELEASE_LABEL } from '@/constants/release';
 import { getCanvasPixelRatio, getVisualQuality } from '@/lib/render-quality';
+import { getVisibleLandingGuideRadius } from '@/lib/landing-guide-geometry';
 import {
   getCrosswindVector,
   getFuelBand,
@@ -1217,6 +1218,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         const guideColor = draftHazard ? '#FF3D71' : isLandingLocked ? '#00E676' : selectedRunway.color;
         const approachEntry = getApproachEntry(selectedRunway, landingValidation.approachGateLength);
         const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
+        const touchdownGuideRadius = getVisibleLandingGuideRadius(
+          selectedRunway,
+          landingValidation.captureRadius,
+          pulse,
+        );
         ctx.save();
         ctx.strokeStyle = guideColor;
         ctx.fillStyle = `${guideColor}18`;
@@ -1226,7 +1232,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.arc(
           selectedRunway.startX,
           selectedRunway.startY,
-          (selectedRunway.touchdownRadius + 10) * pulse,
+          touchdownGuideRadius,
           0,
           Math.PI * 2,
         );

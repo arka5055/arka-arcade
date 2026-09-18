@@ -50,11 +50,12 @@ import {
 } from '../lib/mission-system';
 import { getCanvasPixelRatio, getVisualQuality } from '../lib/render-quality';
 import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '../lib/campaign';
+import { getVisibleLandingGuideRadius } from '../lib/landing-guide-geometry';
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.2.4');
-    expect(RELEASE_LABEL).toBe('BUILD v1.2.4');
+    expect(RELEASE_VERSION).toBe('v1.2.5');
+    expect(RELEASE_LABEL).toBe('BUILD v1.2.5');
   });
 
   it('defines valid specifications for each aircraft class', () => {
@@ -527,6 +528,18 @@ describe('Assisted runway approach', () => {
       helipad,
     );
     expect(route.isLocked).toBe(true);
+    expect(route.captureRadius).toBe(42);
+    expect(Math.hypot(route.capturePoint!.x - 200, route.capturePoint!.y - 200)).toBeCloseTo(42, 5);
+    expect(getVisibleLandingGuideRadius(helipad, route.captureRadius, 0.94)).toBeGreaterThan(route.captureRadius);
+
+    // A line that passes beside the old broad halo must never look like a valid H1 landing.
+    const outsidePad = validateLandingRoute(
+      { x: 320, y: 150 },
+      [{ x: 180, y: 150 }],
+      helipad,
+    );
+    expect(outsidePad.isLocked).toBe(false);
+    expect(outsidePad.capturePoint).toBeUndefined();
   });
 
   it('excludes the near-aircraft pickup points from a straight player route', () => {

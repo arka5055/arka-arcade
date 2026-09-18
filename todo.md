@@ -63,3 +63,9 @@
 - [x] Replace broad corridor-area capture with an exact finite approach-gate intersection.
 - [x] Reject off-runway and parallel near-miss routes while retaining one-swipe gate crossing.
 - [x] Run independent QA scenarios for R34, diagonal R28, vertical landing, overdraw, and nearby false positives.
+
+## Helipad capture clarity (v1.2.5)
+
+- [x] Restrict H1/M1 capture to a small pad-adjacent radius instead of a visually detached halo.
+- [x] Guarantee the rendered vertical landing halo never shrinks below the valid capture boundary.
+- [x] Independently recheck valid H1 arrival, a 50px near miss, and directional runway regression behavior.
