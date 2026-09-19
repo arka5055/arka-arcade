@@ -6,7 +6,13 @@ The game uses a Canvas-based tactical board, player-drawn flight routes, finite 
 
 ## Live PWA
 
-The game is at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/). Add that URL to the iPhone Home Screen from Safari.
+Play and install **Skyline Signal** here:
+
+**[https://arka5055.github.io/](https://arka5055.github.io/)**
+
+Open that URL in Safari, then Add to Home Screen. It is a public, standalone PWA — no login required.
+
+The train game (Thought Tracks) is a separate app at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/).
 
 ## Local development
 
@@ -54,7 +60,7 @@ A player selects an aircraft and draws its route. The game preserves the player-
 
 ## Publishing
 
-Publish from Grok so the live app stays at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/). Do not publish a second PWA to GitHub Pages.
+Skyline Signal publishes to GitHub Pages at [https://arka5055.github.io/](https://arka5055.github.io/). Thought Tracks stays on the Grok app URL.
 
 ## Contribution workflow
 
