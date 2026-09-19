@@ -1,43 +1,23 @@
 # Arcade
 
-One repository for the launcher and both games.
+One repository for the launcher and the games, published together.
 
 - **Launcher** — pick a game
+- **Coffee Rush** — two-minute barista shift
 - **Skyline Signal** — touch-first air-traffic control
 - **Thought Tracks** — divided-attention train routing
 
 ## Play
 
-**[https://amber-brick-glow-nova.grok.me/](https://amber-brick-glow-nova.grok.me/)**
+The combined launcher is **[https://coffee-rush.grok.me/](https://coffee-rush.grok.me/)**.
 
-| | Play | Install |
-| --- | --- | --- |
-| Arcade | [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/) | Open, then Add to Home Screen |
-| Skyline Signal | [/skyline/](https://amber-brick-glow-nova.grok.me/skyline/) | Open that page, then Add to Home Screen |
-| Thought Tracks | [/tracks/](https://amber-brick-glow-nova.grok.me/tracks/) | Open that page, then Add to Home Screen |
+| | Play |
+| --- | --- |
+| Arcade | [coffee-rush.grok.me](https://coffee-rush.grok.me/) |
+| Coffee Rush | [coffee-rush.grok.me/coffee](https://coffee-rush.grok.me/coffee) |
+| Skyline Signal | [coffee-rush.grok.me/skyline/](https://coffee-rush.grok.me/skyline/) |
+| Thought Tracks | [coffee-rush.grok.me/tracks/](https://coffee-rush.grok.me/tracks/) |
 
-Skyline Signal also remains on GitHub Pages at [https://arka5055.github.io/](https://arka5055.github.io/).
+Source of truth: **[github.com/arka5055/coffee-rush](https://github.com/arka5055/coffee-rush)**
 
-## Layout
-
-```
-arcade/            launcher PWA (served at /)
-arcade/skyline/    Skyline Signal static PWA (served at /skyline/)
-thought-tracks/    Thought Tracks PWA (served at /tracks/)
-app/               Skyline Signal Expo source
-```
-
-## Local development
-
-```bash
-git clone https://github.com/arka5055/skyline-signal.git
-cd skyline-signal
-pnpm install
-pnpm dev
-```
-
-`pnpm dev` serves the launcher. `pnpm run build` exports both games into the static PWA used for Grok publish.
-
-## Source
-
-Everything lives in this repo: [github.com/arka5055/skyline-signal](https://github.com/arka5055/skyline-signal)
+This repo still holds Skyline Signal source (`app/`) and Thought Tracks (`thought-tracks/`).

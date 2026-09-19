@@ -8,8 +8,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Arcade">
-  <title>Arcade — Skyline Signal & Thought Tracks</title>
-  <meta name="description" content="Two mobile games: Skyline Signal air-traffic control and Thought Tracks train routing.">
+  <title>Arcade — Coffee Rush, Skyline Signal & Thought Tracks</title>
+  <meta name="description" content="Three mobile games: Coffee Rush, Skyline Signal, and Thought Tracks.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <style>
@@ -83,6 +83,7 @@
     }
     .skyline { background: var(--sky); }
     .tracks { background: var(--moss); }
+    .coffee { background: #083d42; }
     .shot {
       position: relative;
       overflow: hidden;
@@ -148,12 +149,24 @@
 <body>
   <main class="page">
     <header class="mast">
-      <p class="kicker">Two games</p>
+      <p class="kicker">Three games</p>
       <h1>Pick a game</h1>
       <p class="lede">Tap a card to play. On iPhone, open the game, then Add to Home Screen.</p>
     </header>
 
     <section class="games" aria-label="Games">
+      <a class="game coffee" href="https://coffee-rush.grok.me/">
+        <div class="shot">
+          <img src="/media/coffee.jpg" alt="" width="800" height="420">
+        </div>
+        <div class="copy">
+          <p class="kind">Barista shift</p>
+          <h2>Coffee Rush</h2>
+          <p class="blurb">Match tickets, pour, and serve on green before the clock runs out.</p>
+          <span class="cta">Play</span>
+        </div>
+      </a>
+
       <a class="game skyline" href="/skyline/">
         <div class="shot">
           <img src="/media/skyline.jpg" alt="" width="800" height="420">
