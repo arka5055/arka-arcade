@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0b1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Infinite">
+  <title>Infinite Tic Tac Toe</title>
+  <meta name="description" content="Keep only three marks. Your oldest vanishes on the fourth. No draws.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/infinite/apple-touch-icon.svg">
+  <link rel="manifest" href="/infinite/manifest.json">
+  <link rel="stylesheet" href="/infinite/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hud">
+      <button class="icon" id="btn-home" aria-label="All games">←</button>
+      <div class="turn" id="turn">YOUR MOVE</div>
+      <button class="icon" id="btn-new" aria-label="New game">↻</button>
+    </header>
+
+    <p class="score" id="score">YOU 0 · CPU 0</p>
+
+    <section class="board" id="board" aria-label="Board"></section>
+
+    <p class="hint" id="hint">You keep three marks. The oldest fades, then vanishes.</p>
+  </main>
+
+  <div class="overlay" id="title">
+    <div class="card">
+      <p class="kicker">Arcade</p>
+      <h1>Infinite Tic Tac Toe</h1>
+      <p class="lede">Only three marks each. Your fourth move erases your oldest. The board never fills. Someone always wins.</p>
+      <button class="play" id="btn-cpu">Play vs CPU</button>
+      <button class="ghost" id="btn-hotseat">Two players</button>
+      <a class="ghost home-link" href="/">All games</a>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="done">
+    <div class="card">
+      <h1 id="done-title">You win</h1>
+      <p class="lede" id="done-copy">Three in a row after the oldest mark vanished.</p>
+      <button class="play" id="btn-again">Play again</button>
+      <a class="ghost home-link" href="/">All games</a>
+    </div>
+  </div>
+
+  <script type="module" src="/infinite/game.js"></script>
+</body>
+</html>

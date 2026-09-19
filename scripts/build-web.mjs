@@ -197,6 +197,7 @@ writeFileSync(
         },
         { handle: "filesystem" },
         { src: "/coffee(?:/.*)?", dest: "/coffee/index.html" },
+        { src: "/infinite(?:/.*)?", dest: "/infinite/index.html" },
         { src: "/tracks(?:/.*)?", dest: "/tracks/index.html" },
         { src: "/skyline(?:/.*)?", dest: "/skyline/index.html" },
         { src: "/(.*)", dest: "/index.html" },
@@ -214,9 +215,10 @@ writeFileSync(
       outputDirectory: "dist-web",
       rewrites: [
         { source: "/coffee/:path*", destination: "/coffee/:path*" },
+        { source: "/infinite/:path*", destination: "/infinite/:path*" },
         { source: "/tracks/:path*", destination: "/tracks/:path*" },
         { source: "/skyline/:path*", destination: "/skyline/:path*" },
-        { source: "/((?!coffee/|tracks/|skyline/|__grok/).*)", destination: "/index.html" },
+        { source: "/((?!coffee/|infinite/|tracks/|skyline/|__grok/).*)", destination: "/index.html" },
       ],
       headers: [
         {

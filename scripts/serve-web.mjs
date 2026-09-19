@@ -9,6 +9,7 @@ const ARCADE = path.join(ROOT, "arcade");
 const TRACKS = path.join(ROOT, "thought-tracks");
 const SKYLINE = path.join(ARCADE, "skyline");
 const COFFEE = path.join(ARCADE, "coffee");
+const INFINITE = path.join(ARCADE, "infinite");
 const GROK = path.join(ROOT, "public", "__grok");
 const PUBLIC = path.join(ROOT, "public");
 const port = Number(process.env.PORT || 8080);
@@ -59,6 +60,9 @@ function mapUrl(urlPath) {
   if (urlPath === "/coffee" || urlPath.startsWith("/coffee/")) {
     return { root: COFFEE, rel: urlPath.slice("/coffee".length).replace(/^\/+/, ""), spa: "index.html" };
   }
+  if (urlPath === "/infinite" || urlPath.startsWith("/infinite/")) {
+    return { root: INFINITE, rel: urlPath.slice("/infinite".length).replace(/^\/+/, ""), spa: "index.html" };
+  }
   return { root: ARCADE, rel: urlPath.replace(/^\/+/, ""), spa: "index.html" };
 }
 
@@ -98,5 +102,5 @@ server.on("error", (err) => {
   process.exit(1);
 });
 server.listen({ port, host: "0.0.0.0", ipv6Only: false }, () => {
-  console.log(`[arcade] hub ${ARCADE} · coffee ${COFFEE} · tracks ${TRACKS} · skyline ${SKYLINE} on 0.0.0.0:${port}`);
+  console.log(`[arcade] hub ${ARCADE} · coffee ${COFFEE} · infinite ${INFINITE} · tracks ${TRACKS} · skyline ${SKYLINE} on 0.0.0.0:${port}`);
 });

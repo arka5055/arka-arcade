@@ -1,0 +1,20 @@
+{
+  "id": "/infinite/",
+  "name": "Infinite Tic Tac Toe",
+  "short_name": "Infinite",
+  "start_url": "/infinite/",
+  "scope": "/infinite/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1014",
+  "theme_color": "#0b1014",
+  "description": "Keep three marks. Your oldest vanishes on the fourth.",
+  "icons": [
+    {
+      "src": "/infinite/apple-touch-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
