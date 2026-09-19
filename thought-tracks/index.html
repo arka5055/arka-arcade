@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tracks">
+  <meta name="theme-color" content="#3a5c3a">
+  <title>Thought Tracks</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud" id="hud">
+    <div class="chip"><b>TIME</b><span id="hud-time">2:00</span></div>
+    <div class="chip"><b>CORRECT</b><span id="hud-correct">0 of 8</span></div>
+    <div class="chip"><b>LVL</b><span id="hud-level">1</span></div>
+  </div>
+  <div class="hud bottom">
+    <button id="btn-pause" aria-label="Pause">II</button>
+    <button id="btn-restart" class="wide" aria-label="New game">NEW</button>
+    <button id="btn-mute" aria-label="Mute">♪</button>
+  </div>
+
+  <div class="overlay" id="title">
+    <div class="card">
+      <h1>Thought Tracks</h1>
+      <p class="hint">Tap a green circle to flip the track. Send each train to the house with the same color and letter. You never tap the trains.</p>
+      <button class="play" id="btn-play">PLAY</button>
+      <a class="ghost home-link" href="/">ALL GAMES</a>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="pause">
+    <div class="card">
+      <h1>Paused</h1>
+      <p class="hint">Switches stay as you left them.</p>
+      <button class="play" id="btn-resume">RESUME</button>
+      <button class="ghost" id="btn-new">NEW GAME</button>
+      <a class="ghost home-link" href="/">ALL GAMES</a>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="done">
+    <div class="card">
+      <h1 id="done-title">Round over</h1>
+      <div class="stats">
+        <div>Home<strong id="done-home">0</strong></div>
+        <div>Missed<strong id="done-miss">0</strong></div>
+        <div>Score<strong id="done-score">0</strong></div>
+        <div>Best<strong id="done-best">0</strong></div>
+      </div>
+      <button class="play" id="btn-again">PLAY AGAIN</button>
+      <a class="ghost home-link" href="/">ALL GAMES</a>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

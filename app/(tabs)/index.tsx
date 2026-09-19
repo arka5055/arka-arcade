@@ -24,6 +24,12 @@ import { CAREER_ACHIEVEMENTS, getCampaignAchievementIds } from '@/lib/campaign';
 import * as Haptics from 'expo-haptics';
 import { RELEASE_VERSION } from '@/constants/release';
 
+const ARCADE_HOME = Platform.OS === 'web' && process.env.EXPO_PUBLIC_BASE_URL === '/skyline';
+
+function goArcadeHome() {
+  if (typeof window !== 'undefined') window.location.assign('/');
+}
+
 export default function GameScreen() {
   const [levelIndex, setLevelIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -393,6 +399,17 @@ export default function GameScreen() {
             >
               <Text style={styles.resumeButtonText}>RESUME CONTROL</Text>
             </TouchableOpacity>
+            {ARCADE_HOME ? (
+              <TouchableOpacity
+                style={styles.arcadeHomeButton}
+                onPress={goArcadeHome}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Back to all games"
+              >
+                <Text style={styles.arcadeHomeButtonText}>ALL GAMES</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </View>
@@ -486,6 +503,17 @@ export default function GameScreen() {
             >
               <Text style={styles.primaryModalButtonText}>RETRY APPROACH</Text>
             </TouchableOpacity>
+            {ARCADE_HOME ? (
+              <TouchableOpacity
+                style={styles.arcadeHomeButton}
+                onPress={goArcadeHome}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Back to all games"
+              >
+                <Text style={styles.arcadeHomeButtonText}>ALL GAMES</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -522,6 +550,17 @@ export default function GameScreen() {
                 {levelIndex < LEVELS.length - 1 ? 'NEXT FLIGHT SECTOR' : 'REPLAY FLEET'}
               </Text>
             </TouchableOpacity>
+            {ARCADE_HOME ? (
+              <TouchableOpacity
+                style={styles.arcadeHomeButton}
+                onPress={goArcadeHome}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Back to all games"
+              >
+                <Text style={styles.arcadeHomeButtonText}>ALL GAMES</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -876,6 +915,20 @@ const styles = StyleSheet.create({
     color: '#030c14',
     fontSize: 14,
     fontWeight: '800',
+    letterSpacing: 1,
+  },
+  arcadeHomeButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  arcadeHomeButtonText: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 1,
   },
   bottomDock: {

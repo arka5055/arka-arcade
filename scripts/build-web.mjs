@@ -1,63 +1,171 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const ARCADE = join(ROOT, "arcade");
+const TRACKS = join(ROOT, "thought-tracks");
+const SKYLINE = join(ARCADE, "skyline");
 const DIST_WEB = join(ROOT, "dist-web");
-const PWA_RELEASE = join(ROOT, ".pwa-release");
 const DIST = join(ROOT, "dist");
 const VERCEL_OUT = join(ROOT, ".vercel", "output");
 const VERCEL_STATIC = join(VERCEL_OUT, "static");
 
-function hasIndex(dir) {
-  return existsSync(join(dir, "index.html"));
-}
-
 function copyDir(from, to) {
   const src = resolve(from);
   const dest = resolve(to);
-  if (src === dest) return;
   rmSync(dest, { recursive: true, force: true });
-  mkdirSync(dirname(dest), { recursive: true });
-  cpSync(src, dest, { recursive: true });
+  mkdirSync(dest, { recursive: true });
+  for (const name of readdirSync(src)) {
+    if (name.startsWith("qa-") || name === ".git" || name === "skyline") continue;
+    cpSync(join(src, name), join(dest, name), { recursive: true });
+  }
 }
 
-function expoExport() {
-  const env = {
-    ...process.env,
-    CI: process.env.CI || "1",
-    EXPO_NO_TELEMETRY: "1",
-    EXPO_NO_DOTENV: "1",
-  };
-  const result = spawnSync(
-    "npx",
-    ["expo", "export", "--platform", "web", "--output-dir", DIST_WEB],
-    { cwd: ROOT, stdio: "inherit", env },
-  );
+function copyInto(from, to) {
+  mkdirSync(to, { recursive: true });
+  for (const name of readdirSync(from)) {
+    if (name.startsWith("qa-") || name === ".git") continue;
+    cpSync(join(from, name), join(to, name), { recursive: true });
+  }
+}
+
+function ensureSkyline() {
+  if (existsSync(join(SKYLINE, "index.html"))) return;
+  const result = spawnSync("node", [join(ROOT, "scripts", "export-skyline.mjs")], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: { ...process.env, EXPO_PUBLIC_BASE_URL: "/skyline", EXPO_NO_TELEMETRY: "1" },
+  });
   if (result.status !== 0) {
-    throw new Error(`expo export failed with status ${result.status ?? "null"}`);
-  }
-  if (!hasIndex(DIST_WEB)) {
-    throw new Error("expo export finished without index.html");
+    throw new Error("Skyline Signal web export failed");
   }
 }
 
-if (hasIndex(PWA_RELEASE) && !hasIndex(DIST_WEB)) {
-  copyDir(PWA_RELEASE, DIST_WEB);
+function rewriteSkylinePaths(dir = SKYLINE) {
+  const exts = new Set([".html", ".js", ".css", ".json", ".webmanifest"]);
+  const prefixes = ["/scenery/", "/icons/", "/map/", "/sprites/", "/props/", "/manifest.json"];
+  function walk(folder) {
+    for (const name of readdirSync(folder, { withFileTypes: true })) {
+      const full = join(folder, name.name);
+      if (name.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!exts.has(name.name.slice(name.name.lastIndexOf(".")))) continue;
+      let text = readFileSync(full, "utf8");
+      const original = text;
+      for (const prefix of prefixes) {
+        const already = `/skyline${prefix}`;
+        text = text.split(already).join("___SKY___");
+        text = text.split(prefix).join(already);
+        text = text.split("___SKY___").join(already);
+      }
+      if (text !== original) writeFileSync(full, text);
+    }
+  }
+  walk(dir);
 }
 
-if (!hasIndex(DIST_WEB)) {
-  expoExport();
+function writeSkylineWorker() {
+  const sw = `const CACHE = 'skyline-signal-arcade-v1';
+const BASE = '/skyline';
+const APP_SHELL = [BASE + '/', BASE + '/index.html', BASE + '/manifest.json'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))));
+  }
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  if (!url.pathname.startsWith(BASE + '/') && url.pathname !== BASE) return;
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() => caches.match(BASE + '/')));
+    return;
+  }
+  event.respondWith(
+    fetch(event.request).then((response) => {
+      const copy = response.clone();
+      if (response.ok) caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+      return response;
+    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match(BASE + '/'))),
+  );
+});
+`;
+  writeFileSync(join(SKYLINE, "service-worker.js"), sw);
+  const manifestPath = join(SKYLINE, "manifest.json");
+  if (existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      manifest.id = "/skyline/";
+      manifest.start_url = "/skyline/";
+      manifest.scope = "/skyline/";
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    } catch {
+      // Expo may emit a different manifest shape; keep the generated file.
+    }
+  } else {
+    cpSync(join(ROOT, "public", "manifest.json"), manifestPath);
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.id = "/skyline/";
+    manifest.start_url = "/skyline/";
+    manifest.scope = "/skyline/";
+    if (Array.isArray(manifest.icons)) {
+      manifest.icons = manifest.icons.map((icon) => ({
+        ...icon,
+        src: icon.src.startsWith("/") ? `/skyline${icon.src}` : icon.src,
+      }));
+    }
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
 }
 
-copyDir(DIST_WEB, DIST);
+if (!existsSync(join(ARCADE, "index.html"))) throw new Error("arcade/index.html is missing");
+if (!existsSync(join(TRACKS, "index.html"))) throw new Error("thought-tracks/index.html is missing");
+
+ensureSkyline();
+rewriteSkylinePaths();
+writeSkylineWorker();
+
+function assemble(dest) {
+  copyDir(ARCADE, dest);
+  copyInto(TRACKS, join(dest, "tracks"));
+  copyInto(SKYLINE, join(dest, "skyline"));
+  for (const name of ["og.jpg", "x-banner.jpg", "favicon.svg"]) {
+    const from = join(ROOT, "public", name);
+    if (existsSync(from)) cpSync(from, join(dest, name));
+  }
+  const grok = join(ROOT, "public", "__grok");
+  if (existsSync(grok)) cpSync(grok, join(dest, "__grok"), { recursive: true });
+}
+
+assemble(DIST_WEB);
+assemble(DIST);
 
 rmSync(join(VERCEL_OUT, "functions"), { recursive: true, force: true });
 rmSync(VERCEL_STATIC, { recursive: true, force: true });
 mkdirSync(VERCEL_STATIC, { recursive: true });
-cpSync(DIST_WEB, VERCEL_STATIC, { recursive: true });
+assemble(VERCEL_STATIC);
 
 writeFileSync(
   join(VERCEL_OUT, "config.json"),
@@ -71,11 +179,23 @@ writeFileSync(
           continue: true,
         },
         {
+          src: "/tracks/service-worker.js",
+          headers: { "cache-control": "public, max-age=0, must-revalidate" },
+          continue: true,
+        },
+        {
+          src: "/skyline/service-worker.js",
+          headers: { "cache-control": "public, max-age=0, must-revalidate" },
+          continue: true,
+        },
+        {
           src: "/manifest.json",
           headers: { "cache-control": "public, max-age=0, must-revalidate" },
           continue: true,
         },
         { handle: "filesystem" },
+        { src: "/tracks(?:/.*)?", dest: "/tracks/index.html" },
+        { src: "/skyline(?:/.*)?", dest: "/skyline/index.html" },
         { src: "/(.*)", dest: "/index.html" },
       ],
     },
@@ -84,4 +204,26 @@ writeFileSync(
   )}\n`,
 );
 
-console.log(`[skyline] built static PWA from ${DIST_WEB}`);
+writeFileSync(
+  join(ROOT, "vercel.json"),
+  `${JSON.stringify(
+    {
+      outputDirectory: "dist-web",
+      rewrites: [
+        { source: "/tracks/:path*", destination: "/tracks/:path*" },
+        { source: "/skyline/:path*", destination: "/skyline/:path*" },
+        { source: "/((?!tracks/|skyline/|__grok/).*)", destination: "/index.html" },
+      ],
+      headers: [
+        {
+          source: "/:path*service-worker.js",
+          headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
+        },
+      ],
+    },
+    null,
+    2,
+  )}\n`,
+);
+
+console.log("[arcade] built hub + Thought Tracks + Skyline Signal");

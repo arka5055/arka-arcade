@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0b1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Arcade">
+  <title>Arcade — Skyline Signal & Thought Tracks</title>
+  <meta name="description" content="Two mobile games: Skyline Signal air-traffic control and Thought Tracks train routing.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <style>
+    :root {
+      --bg: #0b1014;
+      --elev: #141a20;
+      --fg: #f2efe6;
+      --muted: #9a9588;
+      --line: rgba(242, 239, 230, 0.12);
+      --sky: #0a1822;
+      --moss: #182318;
+      --play: #f2efe6;
+      --play-fg: #0b1014;
+      --radius: 28px;
+      --radius-sm: 12px;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+      --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      min-height: 100dvh;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+    }
+    a { color: inherit; text-decoration: none; }
+    .page {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: calc(28px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+    }
+    .mast { margin: 0 0 24px; }
+    .kicker {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-family: var(--display);
+      font-size: clamp(2.2rem, 9vw, 3rem);
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+    .lede {
+      margin: 0;
+      max-width: 32ch;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+    .games {
+      display: grid;
+      gap: 16px;
+    }
+    .game {
+      display: grid;
+      grid-template-rows: 176px auto;
+      overflow: hidden;
+      background: var(--elev);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .skyline { background: var(--sky); }
+    .tracks { background: var(--moss); }
+    .shot {
+      position: relative;
+      overflow: hidden;
+      background: #101418;
+    }
+    .shot img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .skyline .shot { background: radial-gradient(120% 80% at 50% 110%, #1a4a5c 0%, #071018 62%); }
+    .tracks .shot { background: radial-gradient(120% 80% at 50% 110%, #3d5a32 0%, #10180f 62%); }
+    .copy { padding: 18px 18px 20px; }
+    .kind {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-family: var(--display);
+      font-size: 1.6rem;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+    .blurb {
+      margin: 0 0 16px;
+      color: rgba(242, 239, 230, 0.78);
+      line-height: 1.45;
+      font-size: 0.92rem;
+    }
+    .cta {
+      display: inline-grid;
+      place-items: center;
+      min-height: 44px;
+      padding: 0 18px;
+      border-radius: var(--radius-sm);
+      background: var(--play);
+      color: var(--play-fg);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .game:active { transform: scale(0.985); }
+    .game:active .cta { opacity: 0.86; }
+    @media (min-width: 720px) {
+      .page { max-width: 880px; padding-top: 48px; }
+      .games { grid-template-columns: 1fr 1fr; }
+      .game { grid-template-rows: 220px auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .game:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="mast">
+      <p class="kicker">Two games</p>
+      <h1>Pick a game</h1>
+      <p class="lede">Tap a card to play. On iPhone, open the game, then Add to Home Screen.</p>
+    </header>
+
+    <section class="games" aria-label="Games">
+      <a class="game skyline" href="/skyline/">
+        <div class="shot">
+          <img src="/media/skyline.jpg" alt="" width="800" height="420">
+        </div>
+        <div class="copy">
+          <p class="kind">Air traffic</p>
+          <h2>Skyline Signal</h2>
+          <p class="blurb">Draw a path from each plane to the matching strip. Keep the sky clear.</p>
+          <span class="cta">Play</span>
+        </div>
+      </a>
+
+      <a class="game tracks" href="/tracks/">
+        <div class="shot">
+          <img src="/media/tracks.jpg" alt="" width="800" height="420">
+        </div>
+        <div class="copy">
+          <p class="kind">Train routing</p>
+          <h2>Thought Tracks</h2>
+          <p class="blurb">Tap the green circles. Send every train to the house that matches it.</p>
+          <span class="cta">Play</span>
+        </div>
+      </a>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var key = 'arcade-bust-v4';
+      if (!window.sessionStorage || sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+      var dirty = false;
+      var jobs = [];
+      if (navigator.serviceWorker) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          if (regs.length) dirty = true;
+          return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+        }));
+      }
+      if (window.caches) {
+        jobs.push(caches.keys().then(function (keys) {
+          if (keys.length) dirty = true;
+          return Promise.all(keys.map(function (name) { return caches.delete(name); }));
+        }));
+      }
+      Promise.all(jobs).then(function () {
+        if (dirty) location.reload();
+      }).catch(function () {});
+    })();
+  </script>
+</body>
+</html>

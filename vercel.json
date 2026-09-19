@@ -2,13 +2,21 @@
   "outputDirectory": "dist-web",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/tracks/:path*",
+      "destination": "/tracks/:path*"
+    },
+    {
+      "source": "/skyline/:path*",
+      "destination": "/skyline/:path*"
+    },
+    {
+      "source": "/((?!tracks/|skyline/|__grok/).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/service-worker.js",
+      "source": "/:path*service-worker.js",
       "headers": [
         {
           "key": "Cache-Control",

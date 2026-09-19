@@ -1,0 +1,8 @@
+/* Unused by the hub (styles are inlined so a stale Thought Tracks
+   /styles.css cache cannot restyle the picker). Kept as a dark fallback. */
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: #0b1014;
+  color: #f2efe6;
+}

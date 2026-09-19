@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 
-const CACHE_RESET_KEY = 'skyline-cache-reset-v1.3.0';
+const CACHE_RESET_KEY = 'skyline-cache-reset-v1.3.1';
+const APP_BASE = process.env.EXPO_PUBLIC_BASE_URL || '';
+const SW_URL = `${APP_BASE}/service-worker.js?v=${CACHE_RESET_KEY}`;
+const SW_SCOPE = APP_BASE ? `${APP_BASE}/` : '/';
 
 async function purgeStaleClients() {
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
@@ -39,7 +42,7 @@ export function PwaLifecycle() {
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
     purgeStaleClients()
-      .then(() => navigator.serviceWorker.register(`/service-worker.js?v=${CACHE_RESET_KEY}`, { updateViaCache: 'none' }))
+      .then(() => navigator.serviceWorker.register(SW_URL, { updateViaCache: 'none', scope: SW_SCOPE }))
       .then(async (registration) => {
         registrationRef = registration;
         if (registration.waiting) {

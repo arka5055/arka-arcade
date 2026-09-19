@@ -6,6 +6,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist-web/
 web-build/
 expo-env.d.ts
 
@@ -67,3 +68,12 @@ Thumbs.db
 
 # Generated static PWA release output
 .pwa-release/
+.vercel/
+
+# Sandbox / preview only
+.grok/
+AGENTS.md
+artifacts/
+attachments/
+screenshots/
+public/__grok/

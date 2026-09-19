@@ -86,8 +86,8 @@ const config: ExpoConfig = {
     name: "Skyline Signal",
     shortName: "Skyline",
     lang: "en",
-    scope: "/",
-    startUrl: "/",
+    scope: process.env.EXPO_PUBLIC_BASE_URL ? `${process.env.EXPO_PUBLIC_BASE_URL}/` : "/",
+    startUrl: process.env.EXPO_PUBLIC_BASE_URL ? `${process.env.EXPO_PUBLIC_BASE_URL}/` : "/",
     themeColor: "#030C14",
     backgroundColor: "#030C14",
     display: "standalone",
@@ -140,6 +140,9 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+    ...(process.env.EXPO_PUBLIC_BASE_URL
+      ? { baseUrl: process.env.EXPO_PUBLIC_BASE_URL }
+      : {}),
   },
 };
 
