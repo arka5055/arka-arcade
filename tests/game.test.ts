@@ -26,6 +26,7 @@ import { getLandingDuration, getLandingSequence, getLandingStageAtElapsed } from
 import { canCommitLanding, getPhysicalTouchdownRadius, isInsidePhysicalTouchdown } from '../lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor } from '../lib/traffic-conflicts';
 import {
+  alignRunwayToHeading,
   blendLandingHeading,
   canBeginForwardRunwayLanding,
   getFinalGlideAimPoint,
@@ -54,8 +55,8 @@ import { getVisibleLandingGuideRadius } from '../lib/landing-guide-geometry';
 
 describe('Aircraft Definitions', () => {
   it('exposes the current release identifier inside the game', () => {
-    expect(RELEASE_VERSION).toBe('v1.2.5');
-    expect(RELEASE_LABEL).toBe('BUILD v1.2.5');
+    expect(RELEASE_VERSION).toBe('v1.3.0');
+    expect(RELEASE_LABEL).toBe('BUILD v1.3.0');
   });
 
   it('defines valid specifications for each aircraft class', () => {
@@ -122,17 +123,19 @@ describe('Aircraft Definitions', () => {
     expect(getAircraftSafetyRadius('jet')).toBeLessThan(getAircraftSafetyRadius('supersonic'));
   });
 
-  it('allows a flight to use exactly its assigned runway and rejects every other runway', () => {
+  it('matches colour to surface, not a single runway id', () => {
     const runways: RunwayZone[] = [
       { id: 'runway-main', name: 'R34', startX: 0, startY: 0, endX: 0, endY: 100, allowedTypes: ['jet', 'supersonic', 'fighter'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
+      { id: 'runway-west', name: 'R27', startX: 80, startY: 0, endX: 80, endY: 100, allowedTypes: ['jet'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E5FF', type: 'runway' },
       { id: 'runway-diagonal', name: 'R28', startX: 0, startY: 0, endX: 100, endY: 100, allowedTypes: ['propeller', 'cargo'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#FFB300', type: 'runway' },
       { id: 'water-bay', name: 'Bay', startX: 0, startY: 0, endX: 100, endY: 0, allowedTypes: ['seaplane'], heading: 0, headingTolerance: 1, touchdownRadius: 20, color: '#00E676', type: 'water' },
       { id: 'helipad-h1', name: 'H1', startX: 50, startY: 50, endX: 50, endY: 50, allowedTypes: ['helicopter', 'tiltrotor'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 34, color: '#C86BFF', type: 'helipad' },
       { id: 'mooring-m1', name: 'M1', startX: 80, startY: 50, endX: 80, endY: 50, allowedTypes: ['zeppelin'], heading: 0, headingTolerance: Math.PI, touchdownRadius: 42, color: '#FF5CD6', type: 'mooring' },
     ];
     expect(getAssignedRunway('supersonic', runways)?.id).toBe('runway-main');
-    expect(isAssignedRunway('supersonic', runways[1])).toBe(false);
-    expect(isAssignedRunway('seaplane', runways[2])).toBe(true);
+    expect(isAssignedRunway('supersonic', runways[1])).toBe(true);
+    expect(isAssignedRunway('supersonic', runways[2])).toBe(false);
+    expect(isAssignedRunway('seaplane', runways[3])).toBe(true);
     expect(getAssignedRunway('helicopter', runways)?.id).toBe('helipad-h1');
     expect(isAssignedRunway('helicopter', runways[0])).toBe(false);
     expect(getAssignedRunway('cargo', runways)?.id).toBe('runway-diagonal');
@@ -247,8 +250,10 @@ describe('Stage environments and progressive pressure', () => {
   it('gently increases traffic pressure and reduces the spawn interval as a sector progresses', () => {
     const initial = getTrafficPressure(0, 12);
     const lateSector = getTrafficPressure(12, 12);
+    const overtime = getTrafficPressure(24, 12);
     expect(initial).toBe(1);
     expect(lateSector).toBeGreaterThan(initial);
+    expect(overtime).toBeGreaterThan(lateSector);
     expect(getDynamicSpawnInterval(7600, lateSector)).toBeLessThan(7600);
   });
 });
@@ -342,16 +347,16 @@ describe('Staged landing sequence', () => {
     })).toBe(false);
   });
 
-  it('uses a close physical threshold after the player has received route clearance', () => {
+  it('uses the coloured pavement as the physical landing surface', () => {
     const testRunway: RunwayZone = {
       id: 'threshold-test', name: 'T1', startX: 200, startY: 200, endX: 200, endY: 500,
       allowedTypes: ['jet'], heading: Math.PI / 2, headingTolerance: 0.8,
       touchdownRadius: 36, color: '#00E5FF', type: 'runway',
     };
     const physicalRadius = getPhysicalTouchdownRadius(testRunway);
-    expect(physicalRadius).toBeLessThan(validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 196 }], testRunway).captureRadius);
-    expect(isInsidePhysicalTouchdown({ x: 200, y: 200 + physicalRadius - 1 }, testRunway)).toBe(true);
-    expect(isInsidePhysicalTouchdown({ x: 200, y: 200 + physicalRadius + 1 }, testRunway)).toBe(false);
+    expect(isInsidePhysicalTouchdown({ x: 200, y: 350 }, testRunway)).toBe(true);
+    expect(isInsidePhysicalTouchdown({ x: 200 + physicalRadius - 1, y: 350 }, testRunway)).toBe(true);
+    expect(isInsidePhysicalTouchdown({ x: 280, y: 350 }, testRunway)).toBe(false);
   });
 });
 
@@ -382,67 +387,53 @@ describe('Assisted runway approach', () => {
     expect(isInsideAutoLandingCapture({ x: 200, y: 300 }, runway)).toBe(false);
   });
 
-  it('locks a player-drawn route only when its final segment reaches the threshold in runway direction', () => {
+  it('locks a player-drawn route when it reaches the coloured strip', () => {
     const valid = validateLandingRoute(
       { x: 200, y: 40 },
       [{ x: 200, y: 120 }, { x: 200, y: 196 }],
       runway,
     );
     expect(valid.isLocked).toBe(true);
-    expect(valid.endpointDistance).toBeLessThanOrEqual(valid.captureRadius);
   });
 
-  it('keeps a finger-drawn approach locked despite a small final touch wiggle', () => {
+  it('locks a finger-drawn line that meets the coloured pavement', () => {
     const valid = validateLandingRoute(
       { x: 200, y: 40 },
-      [{ x: 200, y: 110 }, { x: 200, y: 180 }, { x: 205, y: 183 }],
+      [{ x: 200, y: 110 }, { x: 205, y: 183 }],
       runway,
     );
-    expect(valid.isInsideCapture).toBe(true);
-    expect(valid.isHeadingAligned).toBe(true);
-    expect(valid.isOnApproachSide).toBe(true);
     expect(valid.isLocked).toBe(true);
   });
 
-  it('locks a broad colour-matched approach gate without demanding a pixel-perfect endpoint', () => {
-    const valid = validateLandingRoute(
-      { x: 110, y: 20 },
-      [{ x: 150, y: 80 }, { x: 300, y: 300 }],
+  it('locks when the line crosses the matching strip from either side', () => {
+    const across = validateLandingRoute(
+      { x: 80, y: 260 },
+      [{ x: 320, y: 260 }],
       runway,
     );
-    expect(valid.isInsideCapture).toBe(false);
-    expect(valid.isInsideApproachGate).toBe(true);
-    expect(valid.isHeadingAligned).toBe(true);
-    expect(valid.isLocked).toBe(true);
+    expect(across.isLocked).toBe(true);
+    expect(across.capturePoint).toBeDefined();
   });
 
-  it('captures a valid line crossing even when the finger continues past the gate', () => {
-    const valid = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 120 }], runway);
-    expect(valid.approachGateLength).toBeGreaterThan(70);
-    expect(valid.approachGateHalfWidth).toBeGreaterThan(40);
+  it('captures a valid line even when the finger continues past the strip', () => {
     const overshot = validateLandingRoute({ x: 200, y: 20 }, [{ x: 200, y: 218 }], runway);
-    expect(overshot.isOnApproachSide).toBe(true);
     expect(overshot.isLocked).toBe(true);
-    expect(overshot.capturePoint!.y).toBeLessThan(200);
+    expect(overshot.capturePoint).toBeDefined();
   });
 
-  it('allows a forgiving endpoint just beyond the threshold without accepting a runway overshoot', () => {
-    const forgiving = validateLandingRoute(
-      { x: 200, y: 40 },
-      [{ x: 200, y: 120 }, { x: 200, y: 212 }],
-      runway,
-    );
-    expect(forgiving.thresholdProjection).toBe(12);
-    expect(forgiving.isLocked).toBe(true);
-  });
-
-  it('does not lock a route that reaches the runway with the wrong final direction', () => {
-    const invalid = validateLandingRoute(
+  it('locks a route that reaches the runway from either direction', () => {
+    const acrossThreshold = validateLandingRoute(
       { x: 120, y: 200 },
       [{ x: 280, y: 200 }, { x: 204, y: 200 }],
       runway,
     );
-    expect(invalid.isLocked).toBe(false);
+    expect(acrossThreshold.isLocked).toBe(true);
+    const reverse = validateLandingRoute(
+      { x: 200, y: 560 },
+      [{ x: 200, y: 480 }],
+      runway,
+    );
+    expect(reverse.isLocked).toBe(true);
   });
 
   it('does not lock a route that runs near the runway but never crosses its finite gate', () => {
@@ -460,10 +451,8 @@ describe('Assisted runway approach', () => {
     const original = [{ x: 200, y: 120 }, { x: 200, y: 222 }];
     const validation = validateLandingRoute({ x: 200, y: 40 }, original, runway);
     const captured = routeThroughLandingCapture(original, validation);
-    expect(validation.headingDifference).toBeCloseTo(0, 6);
     expect(validation.isLocked).toBe(true);
-    expect(captured).toHaveLength(1);
-    expect(captured[0].y).toBeLessThan(200);
+    expect(captured[captured.length - 1].y).toBeLessThanOrEqual(222);
     expect(original[1].y).toBe(222);
   });
 
@@ -512,7 +501,10 @@ describe('Assisted runway approach', () => {
     const aim = getFinalGlideAimPoint(runway);
     expect(getRunwayProgress(aim, runway)).toBeGreaterThan(0);
     expect(canBeginForwardRunwayLanding({ x: 200, y: 160 }, runway)).toBe(true);
-    expect(canBeginForwardRunwayLanding({ x: 200, y: 205 }, runway)).toBe(false);
+    expect(canBeginForwardRunwayLanding({ x: 200, y: 205 }, runway)).toBe(true);
+    expect(canBeginForwardRunwayLanding({ x: 200, y: 620 }, runway)).toBe(false);
+    const reciprocal = alignRunwayToHeading(runway, Math.PI * 1.5);
+    expect(reciprocal.startY).toBe(500);
     expect(isForwardAlongRunway(200, 160, aim.x, aim.y, runway.heading)).toBe(true);
   });
 
@@ -528,8 +520,8 @@ describe('Assisted runway approach', () => {
       helipad,
     );
     expect(route.isLocked).toBe(true);
-    expect(route.captureRadius).toBe(42);
-    expect(Math.hypot(route.capturePoint!.x - 200, route.capturePoint!.y - 200)).toBeCloseTo(42, 5);
+    expect(route.captureRadius).toBe(48);
+    expect(Math.hypot(route.capturePoint!.x - 200, route.capturePoint!.y - 200)).toBeCloseTo(48, 5);
     expect(getVisibleLandingGuideRadius(helipad, route.captureRadius, 0.94)).toBeGreaterThan(route.captureRadius);
 
     // A line that passes beside the old broad halo must never look like a valid H1 landing.
@@ -607,6 +599,7 @@ describe('Active mission system', () => {
     const stormLater = getMissionHazards(stormLevel.mission, 420, 680, 10);
     expect(stormNow).toHaveLength(1);
     expect(stormNow[0].kind).toBe('storm');
+    expect(stormNow[0].label).toBe('TORNADO');
     expect(stormLater[0].x).not.toBe(stormNow[0].x);
     expect(getMissionHazards('training', 420, 680, 0)).toEqual([]);
   });

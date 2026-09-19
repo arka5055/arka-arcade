@@ -26,10 +26,9 @@ import {
 import {
   distanceToLineSegment,
 } from '@/lib/approach-routing';
-import { getAssignedRunway } from '@/lib/runway-assignment';
+import { getAssignedRunway, resolveRouteDestination } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
-import { validateLandingRoute } from '@/lib/landing-route-validation';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import { blendLandingHeading } from '@/lib/landing-motion';
 
@@ -164,7 +163,7 @@ export function AirTrafficCanvas({
               setTimeout(() => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 onPlaneLanded(plane.type, AIRCRAFT_DEFS[plane.type].scoreValue, landingsRef.current);
-                if (landingsRef.current >= currentLevel.targetLandings) onLevelComplete(levelIndex + 1);
+                if (landingsRef.current === currentLevel.targetLandings) onLevelComplete(levelIndex + 1);
               }, 0);
               return [];
             }
@@ -189,8 +188,10 @@ export function AirTrafficCanvas({
           const target = plane.path[0];
           let targetHeading = plane.targetHeading;
           if (target) targetHeading = Math.atan2(target.y - plane.y, target.x - plane.x);
-          else if (plane.x < -25 || plane.x > bounds.width + 25 || plane.y < -25 || plane.y > bounds.height + 25) {
-            targetHeading = Math.atan2(bounds.height / 2 - plane.y, bounds.width / 2 - plane.x);
+          else if (plane.hasEnteredPlayfield && (plane.x < -40 || plane.x > bounds.width + 40 || plane.y < -40 || plane.y > bounds.height + 40)) {
+            gameOverRef.current = true;
+            setTimeout(() => onGameOver('Aircraft left the sector.', scoreRef.current, landingsRef.current), 0);
+            return [];
           }
 
           let diff = targetHeading - plane.heading;
@@ -206,6 +207,8 @@ export function AirTrafficCanvas({
             x: plane.x + Math.cos(heading) * speed * 0.06,
             y: plane.y + Math.sin(heading) * speed * 0.06,
             path: target && Math.hypot(target.x - plane.x, target.y - plane.y) < 24 ? plane.path.slice(1) : plane.path,
+            hasEnteredPlayfield: plane.hasEnteredPlayfield
+              || (plane.x > 8 && plane.x < bounds.width - 8 && plane.y > 8 && plane.y < bounds.height - 8),
           };
 
           const runway = getAssignedRunway(moved.type, runways);
@@ -288,12 +291,13 @@ export function AirTrafficCanvas({
         const drawnPoint = pointFromEvent(event);
         setPlanes((previous) => previous.map((plane) => {
           if (plane.id !== id) return plane;
-          const runway = getAssignedRunway(plane.type, runways);
           const route = [drawnPoint];
+          const destination = resolveRouteDestination(plane.type, plane, route, runways);
           return {
             ...plane,
             path: route,
-            landingCleared: Boolean(runway && validateLandingRoute(plane, route, runway).isLocked),
+            landingCleared: Boolean(destination?.validation.isLocked),
+            committedRunwayId: destination?.runway.id,
           };
         }));
       }

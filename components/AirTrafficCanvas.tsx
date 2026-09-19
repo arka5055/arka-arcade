@@ -26,12 +26,13 @@ import {
   getTrafficPressure,
 } from '@/lib/stage-environments';
 import { createCrashEffect, getCrashProgress, type CrashEffect } from '@/lib/crash-effects';
-import { getAssignedRunway, isAssignedRunway } from '@/lib/runway-assignment';
+import { getAssignedRunway, isAssignedRunway, resolveAircraftRunway, resolveRouteDestination } from '@/lib/runway-assignment';
 import { getAircraftSafetyRadius } from '@/lib/aircraft-performance';
 import { getLandingDuration, getLandingSequence } from '@/lib/landing-sequence';
 import { canCommitLanding, isInsidePhysicalTouchdown } from '@/lib/landing-authorization';
 import { classifyTrafficConflict, getConflictColor, type TrafficConflict } from '@/lib/traffic-conflicts';
 import {
+  alignRunwayToHeading,
   blendLandingHeading,
   canBeginForwardRunwayLanding,
   getFinalGlideAimPoint,
@@ -43,7 +44,7 @@ import {
   cloneRouteSnapshot,
   hasRouteEditIntent,
   restoreRouteSnapshot,
-  type RouteSnapshot,
+  type ActiveStroke,
 } from '@/lib/route-editing';
 import { RELEASE_LABEL } from '@/constants/release';
 import { getCanvasPixelRatio, getVisualQuality } from '@/lib/render-quality';
@@ -92,13 +93,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
   const planesRef = useRef<AircraftInstance[]>([]);
   const selectedPlaneIdRef = useRef<string | null>(null);
-  const activeDrawPathRef = useRef<Point[]>([]);
-  const routeStartPointRef = useRef<Point | null>(null);
-  const gestureStartPointRef = useRef<Point | null>(null);
-  const activePointerIdRef = useRef<number | null>(null);
-  const routeSnapshotRef = useRef<RouteSnapshot | null>(null);
-  const isEditingRouteRef = useRef(false);
-  const draftLandingClearedRef = useRef(false);
+  const strokesRef = useRef<Map<number, ActiveStroke>>(new Map());
   // The animation loop passes performance.now(), so the spawn marker must use that same clock.
   const lastSpawnTimeRef = useRef<number>(performance.now());
   const scoreRef = useRef<number>(0);
@@ -115,11 +110,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
   const crashEffectRef = useRef<CrashEffect | null>(null);
   const crashReportedRef = useRef(false);
   const activeConflictsRef = useRef<TrafficConflict[]>([]);
-  const sectorCompleteRef = useRef(false);
+  const sectorStarAwardedRef = useRef(false);
   const missionElapsedRef = useRef(0);
   const missionWarningCooldownRef = useRef(0);
   const missionFailureReportedRef = useRef(false);
-  const draftHazardViolationRef = useRef(false);
 
   sounds.enabled = soundEnabled;
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
@@ -282,6 +276,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       landingCleared: false,
       isLanding: false,
       landingProgress: 0,
+      committedRunwayId: undefined,
+      hasEnteredPlayfield: false,
       fuelRemaining: currentLevel.mission === 'fuelPriority' ? def.fuelSeconds : undefined,
       warningLevel: 'safe',
       landed: false,
@@ -309,11 +305,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     for (let i = 0; i < planes.length; i++) {
       const p1 = planes[i];
-      if (p1.landed || p1.isLanding) continue;
+      if (p1.landed) continue;
 
       for (let j = i + 1; j < planes.length; j++) {
         const p2 = planes[j];
-        if (p2.landed || p2.isLanding) continue;
+        if (p2.landed) continue;
 
         const dx = p1.x - p2.x;
         const dy = p1.y - p2.y;
@@ -394,11 +390,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       if (currentLevel.mission === 'fuelPriority' && p.fuelRemaining !== undefined && !p.isLanding) {
         p.fuelRemaining = Math.max(0, p.fuelRemaining - dt);
-        if (p.fuelRemaining <= 0 && !missionFailureReportedRef.current) {
-          missionFailureReportedRef.current = true;
-          isGameOverRef.current = true;
-          onGameOver('Fuel exhausted — priority arrival lost.', scoreRef.current, landingsCountRef.current);
-          return;
+        if (p.fuelRemaining <= 0) {
+          planes.splice(i, 1);
+          sounds.playCrash();
+          continue;
         }
       }
 
@@ -407,7 +402,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       if (p.isLanding) {
         p.landingProgress = Math.min(1, p.landingProgress + dt / getLandingDuration(p.type));
         const landing = getLandingSequence(p.type, p.landingProgress);
-        const targetRunway = getAssignedRunway(p.type, runways);
+        const resolved = resolveAircraftRunway(p.type, runways, p.committedRunwayId);
+        const targetRunway = resolved ? alignRunwayToHeading(resolved, p.landingEntryHeading ?? p.heading) : undefined;
         if (targetRunway) {
           const entry = p.landingEntry ?? { x: p.x, y: p.y };
           p.landingEntry = entry;
@@ -448,8 +444,8 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           onPlaneLanded(p.type, scoreBonus, landingsCountRef.current);
 
           // Check level complete
-          if (landingsCountRef.current >= currentLevel.targetLandings) {
-            sectorCompleteRef.current = true;
+          if (landingsCountRef.current >= currentLevel.targetLandings && !sectorStarAwardedRef.current) {
+            sectorStarAwardedRef.current = true;
             onLevelComplete(levelIndex + 1);
           }
         }
@@ -474,8 +470,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       // point in that exact route is flown, capture the aircraft for the final glide to the
       // threshold rather than letting it coast past a valid landing line. This changes no
       // player waypoint; it simply makes the accepted landing intent reliable.
-      const clearedDestination = p.landingCleared && p.path.length === 0
-        ? getAssignedRunway(p.type, runways)
+      const glideRunway = resolveAircraftRunway(p.type, runways, p.committedRunwayId)
+        ?? getAssignedRunway(p.type, runways);
+      const clearedDestination = p.landingCleared && p.path.length === 0 && glideRunway
+        ? alignRunwayToHeading(glideRunway, p.heading)
         : undefined;
       if (clearedDestination) {
         const glideAimPoint = getFinalGlideAimPoint(clearedDestination);
@@ -506,40 +504,33 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       for (const hazard of missionHazards) {
         if (!isInsideMissionHazard(p, hazard, getAircraftSafetyRadius(p.type) * 0.35)) continue;
-        if (hazard.kind === 'storm') {
-          const escapeHeading = Math.atan2(p.y - hazard.y, p.x - hazard.x);
-          p.x += Math.cos(escapeHeading) * dt * 8;
-          p.y += Math.sin(escapeHeading) * dt * 8;
-          continue;
-        }
         if (!missionFailureReportedRef.current) {
           missionFailureReportedRef.current = true;
           isGameOverRef.current = true;
-          onGameOver(`${hazard.label} breach — aircraft lost.`, scoreRef.current, landingsCountRef.current);
+          onGameOver(
+            hazard.kind === 'storm' ? 'Tornado strike — aircraft lost.' : `${hazard.label} breach — aircraft lost.`,
+            scoreRef.current,
+            landingsCountRef.current,
+          );
           return;
         }
       }
 
-      // A flight can only land after the player completes a route that reached the green
-      // clearance state. Merely flying through a runway capture circle never authorizes landing.
-      const assignedRunway = getAssignedRunway(p.type, runways);
+      const assignedRunway = resolveAircraftRunway(p.type, runways, p.committedRunwayId);
       if (assignedRunway) {
-        let angleDiff = Math.abs(p.heading - assignedRunway.heading);
+        const landingRunway = alignRunwayToHeading(assignedRunway, p.heading);
+        let angleDiff = Math.abs(p.heading - landingRunway.heading);
         while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
 
         const authorized = canCommitLanding({
           landingCleared: p.landingCleared,
           routeComplete: p.path.length === 0,
-          insideCapture: isInsidePhysicalTouchdown(p, assignedRunway),
+          insideCapture: isInsidePhysicalTouchdown(p, landingRunway),
           headingDifference: angleDiff,
-          headingTolerance: Math.min(Math.PI, assignedRunway.headingTolerance + 0.55),
-          isHelipad: isVerticalDestination(assignedRunway),
+          headingTolerance: Math.PI / 2,
+          isHelipad: isVerticalDestination(landingRunway),
         });
-        // Do not freeze the staged landing animation after the aircraft has crossed the
-        // threshold. It must still be in front of it so every animated position advances.
-        const isForwardEntry = isVerticalDestination(assignedRunway)
-          || canBeginForwardRunwayLanding(p, assignedRunway);
-        if (authorized && isForwardEntry) {
+        if (authorized && canBeginForwardRunwayLanding(p, landingRunway)) {
           const incomingHeading = p.heading;
           p.isLanding = true;
           p.path = [];
@@ -550,15 +541,20 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       }
 
-      // Screen boundaries wrap / bounce softly
-      const margin = 35;
       const w = dimensions.width;
       const h = dimensions.height;
-      if (p.x < -margin || p.x > w + margin || p.y < -margin || p.y > h + margin) {
-        // Steer back to center if neglected
-        const cx = w / 2;
-        const cy = h / 2;
-        p.targetHeading = Math.atan2(cy - p.y, cx - p.x);
+      const insideField = p.x > 8 && p.x < w - 8 && p.y > 8 && p.y < h - 8;
+      if (insideField) p.hasEnteredPlayfield = true;
+      const offscreenMargin = 42;
+      if (
+        p.hasEnteredPlayfield
+        && (p.x < -offscreenMargin || p.x > w + offscreenMargin || p.y < -offscreenMargin || p.y > h + offscreenMargin)
+        && !missionFailureReportedRef.current
+      ) {
+        missionFailureReportedRef.current = true;
+        isGameOverRef.current = true;
+        onGameOver('Aircraft left the sector.', scoreRef.current, landingsCountRef.current);
+        return;
       }
     }
   }, [dimensions, currentLevel, levelIndex, onPlaneLanded, onLevelComplete, onGameOver]);
@@ -585,14 +581,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     // 1. Premium airport map background: deep ocean, island, apron and taxiways
     const waterGrad = ctx.createLinearGradient(0, 0, w, h);
-    waterGrad.addColorStop(0, '#04121f');
-    waterGrad.addColorStop(0.55, '#092b3f');
-    waterGrad.addColorStop(1, '#061a2a');
+    waterGrad.addColorStop(0, '#1c6f9a');
+    waterGrad.addColorStop(0.55, '#2f9bb8');
+    waterGrad.addColorStop(1, '#1a7f8e');
     ctx.fillStyle = waterGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Photorealistic island scenery sits beneath the tactical overlays at a soft opacity.
-    // The deliberate darkening keeps game routes more legible than the photograph itself.
+    // Photorealistic island scenery sits beneath the tactical overlays.
     if (sceneryImageRef.current?.complete) {
       const image = sceneryImageRef.current;
       const imageRatio = image.width / image.height;
@@ -609,7 +604,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         drawY = (h - drawHeight) / 2;
       }
       ctx.save();
-      ctx.globalAlpha = 0.42;
+      ctx.globalAlpha = 0.78;
       ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
       ctx.fillStyle = stageEnvironment.tint;
       ctx.fillRect(0, 0, w, h);
@@ -632,10 +627,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
     // Island landmass keeps the real landscape visible rather than covering it with a flat map layer.
     const islandGrad = ctx.createLinearGradient(w * 0.1, h * 0.1, w * 0.9, h * 0.9);
-    islandGrad.addColorStop(0, '#244e3f');
+    islandGrad.addColorStop(0, '#5cbf86');
     islandGrad.addColorStop(1, stageEnvironment.terrainTint);
     ctx.save();
-    ctx.globalAlpha = 0.72;
+    ctx.globalAlpha = 0.34;
     ctx.fillStyle = islandGrad;
     ctx.beginPath();
     ctx.moveTo(w * 0.10, h * 0.08);
@@ -1190,33 +1185,34 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.restore();
     }
 
-    // Active touch drawing path
-    if (isEditingRouteRef.current && activeDrawPathRef.current.length > 0) {
+    // Active touch drawing paths — one stroke per finger.
+    strokesRef.current.forEach((stroke) => {
+      if (!stroke.isEditing || stroke.drawPath.length === 0) return;
       ctx.save();
-      const selectedPlane = planesRef.current.find((plane) => plane.id === selectedPlaneIdRef.current);
-      const selectedRunway = selectedPlane && getAssignedRunway(selectedPlane.type, runwaysRef.current);
-      const routeOrigin = routeStartPointRef.current ?? selectedPlane ?? activeDrawPathRef.current[0];
-      const draftRoute = selectedPlane && routeOrigin && selectedRunway
-        ? preservePlayerDrawnRoute(routeOrigin, activeDrawPathRef.current)
+      const selectedPlane = planesRef.current.find((plane) => plane.id === stroke.planeId);
+      const routeOrigin = stroke.routeStart;
+      const draftRoute = selectedPlane
+        ? preservePlayerDrawnRoute(routeOrigin, stroke.drawPath)
         : [];
-      const landingValidation = selectedPlane && routeOrigin && selectedRunway
-        ? validateLandingRoute(routeOrigin, draftRoute, selectedRunway)
-        : null;
-      const draftHazard = routeStartPointRef.current
-        ? routeIntersectsMissionHazard(
-          routeStartPointRef.current,
-          draftRoute,
-          getMissionHazards(currentLevel.mission, w, h, missionElapsedRef.current),
-        )
+      const destination = selectedPlane
+        ? resolveRouteDestination(selectedPlane.type, routeOrigin, draftRoute, runwaysRef.current)
         : undefined;
+      const selectedRunway = destination?.runway
+        ?? (selectedPlane ? getAssignedRunway(selectedPlane.type, runwaysRef.current) : undefined);
+      const landingValidation = destination?.validation
+        ?? (selectedPlane && selectedRunway
+          ? validateLandingRoute(routeOrigin, draftRoute, selectedRunway)
+          : null);
+      const draftHazard = routeIntersectsMissionHazard(
+        routeOrigin,
+        draftRoute,
+        getMissionHazards(currentLevel.mission, w, h, missionElapsedRef.current),
+      );
       const isLandingLocked = Boolean(landingValidation?.isLocked && !draftHazard);
 
-      // Draw the finite handoff gate rather than a broad circular target. The player only has
-      // to cross this bar in the correct direction; nearby points and parallel lines stay invalid.
       if (selectedRunway && landingValidation) {
         const isVertical = isVerticalDestination(selectedRunway);
         const guideColor = draftHazard ? '#FF3D71' : isLandingLocked ? '#00E676' : selectedRunway.color;
-        const approachEntry = getApproachEntry(selectedRunway, landingValidation.approachGateLength);
         const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.06;
         const touchdownGuideRadius = getVisibleLandingGuideRadius(
           selectedRunway,
@@ -1229,38 +1225,18 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.lineWidth = isLandingLocked ? 3 : 2;
         ctx.setLineDash([6, 5]);
         ctx.beginPath();
-        ctx.arc(
-          selectedRunway.startX,
-          selectedRunway.startY,
-          touchdownGuideRadius,
-          0,
-          Math.PI * 2,
-        );
+        ctx.arc(selectedRunway.startX, selectedRunway.startY, touchdownGuideRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         if (!isVertical) {
-          const lateralX = -Math.sin(selectedRunway.heading);
-          const lateralY = Math.cos(selectedRunway.heading);
-          // The broad bar is the actual finger-friendly handoff gate. End a line anywhere
-          // across it and the final glide is accepted; the game never redraws that line.
-          ctx.lineWidth = isLandingLocked ? 8 : 6;
-          ctx.globalAlpha = isLandingLocked ? 0.82 : 0.48;
+          ctx.setLineDash([]);
+          ctx.lineWidth = isLandingLocked ? 7 : 5;
+          ctx.globalAlpha = isLandingLocked ? 0.88 : 0.42;
           ctx.beginPath();
-          ctx.moveTo(
-            approachEntry.x - lateralX * landingValidation.approachGateHalfWidth,
-            approachEntry.y - lateralY * landingValidation.approachGateHalfWidth,
-          );
-          ctx.lineTo(
-            approachEntry.x + lateralX * landingValidation.approachGateHalfWidth,
-            approachEntry.y + lateralY * landingValidation.approachGateHalfWidth,
-          );
+          ctx.moveTo(selectedRunway.startX, selectedRunway.startY);
+          ctx.lineTo(selectedRunway.endX, selectedRunway.endY);
           ctx.stroke();
           ctx.globalAlpha = 1;
-          ctx.lineWidth = isLandingLocked ? 3 : 2;
-          ctx.beginPath();
-          ctx.moveTo(approachEntry.x, approachEntry.y);
-          ctx.lineTo(selectedRunway.startX, selectedRunway.startY);
-          ctx.stroke();
         }
         ctx.setLineDash([]);
         ctx.restore();
@@ -1270,11 +1246,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       ctx.moveTo(routeOrigin.x, routeOrigin.y);
-      activeDrawPathRef.current.forEach(pt => ctx.lineTo(pt.x, pt.y));
+      stroke.drawPath.forEach((pt) => ctx.lineTo(pt.x, pt.y));
       ctx.stroke();
       if (isLandingLocked) {
         const endpoint = landingValidation?.capturePoint
-          ?? activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+          ?? stroke.drawPath[stroke.drawPath.length - 1];
         ctx.setLineDash([]);
         ctx.fillStyle = '#00E676';
         ctx.beginPath();
@@ -1286,7 +1262,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.arc(endpoint.x, endpoint.y, 12, 0, Math.PI * 2);
         ctx.stroke();
         ctx.font = '800 10px -apple-system, system-ui, sans-serif';
-        const lockText = '✓ GATE CAPTURED';
+        const lockText = '✓ CLEARED TO LAND';
         const lockWidth = ctx.measureText(lockText).width + 14;
         ctx.fillStyle = 'rgba(0, 81, 55, 0.94)';
         ctx.fillRect(endpoint.x - lockWidth / 2, endpoint.y - 31, lockWidth, 17);
@@ -1296,23 +1272,17 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         ctx.textAlign = 'center';
         ctx.fillText(lockText, endpoint.x, endpoint.y - 19);
       } else {
-        const endpoint = activeDrawPathRef.current[activeDrawPathRef.current.length - 1];
+        const endpoint = stroke.drawPath[stroke.drawPath.length - 1];
         if (selectedRunway && landingValidation) {
-          const target = selectedRunway.id === 'runway-main' ? 'R34'
-            : selectedRunway.id === 'runway-diagonal' ? 'R28'
-              : selectedRunway.id === 'helipad-h1' ? 'H1' : 'BAY';
-          const targetName = selectedRunway.id === 'mooring-m1' ? 'M1' : target;
+          const target = selectedRunway.id.startsWith('runway-main') ? 'CYAN STRIP'
+            : selectedRunway.id.startsWith('runway-diagonal') ? 'AMBER STRIP'
+              : selectedRunway.id === 'helipad-h1' ? 'H1'
+                : selectedRunway.id === 'mooring-m1' ? 'M1' : 'BAY';
           const hint = draftHazard
             ? `AVOID ${draftHazard.label}`
-            : !landingValidation.isInsideApproachGate
-            ? `CROSS ${targetName} GATE`
-            : !landingValidation.isOnApproachSide
-              ? 'END BEFORE THRESHOLD'
-              : !landingValidation.isHeadingAligned
-                ? 'USE THE GLOWING GATE'
-                : `DRAW TO ${targetName}`;
+            : `DRAW TO ${target}`;
           ctx.setLineDash([]);
-          ctx.fillStyle = 'rgba(3, 12, 20, 0.88)';
+          ctx.fillStyle = 'rgba(12, 28, 24, 0.88)';
           ctx.font = '800 9px -apple-system, system-ui, sans-serif';
           const hintWidth = ctx.measureText(hint).width + 12;
           const hintPosition = clampRadarLabel(endpoint.x, endpoint.y - 29, hintWidth, w, h, 15);
@@ -1326,7 +1296,7 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       }
       ctx.restore();
-    }
+    });
 
     // 5. Draw Aircraft Sprites
     planesRef.current.forEach(p => {
@@ -1361,7 +1331,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
       // Ground-contact detail anchors the rollout to the actual assigned surface.
       // Asphalt receives growing rubber marks; water receives a fading V-shaped wake.
-      const landingRunway = landing ? getAssignedRunway(p.type, runwaysRef.current) : undefined;
+      const resolvedLanding = resolveAircraftRunway(p.type, runwaysRef.current, p.committedRunwayId)
+        ?? getAssignedRunway(p.type, runwaysRef.current);
+      const landingRunway = landing && resolvedLanding
+        ? alignRunwayToHeading(resolvedLanding, p.landingEntryHeading ?? p.heading)
+        : undefined;
       if (landing && landingRunway && landing.runwayProgress > 0.06 && !isVerticalAircraft(p.type)) {
         const runwayVectorX = landingRunway.endX - landingRunway.startX;
         const runwayVectorY = landingRunway.endY - landingRunway.startY;
@@ -1461,12 +1435,13 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
         }
       }
 
-      // Metallic fuselage surface with a bright upper highlight.
+      // Metallic fuselage. A locked landing path turns the aircraft white, as in the original.
+      const lockedColor = p.landingCleared ? '#f4f7fb' : def.color;
       const fuselage = ctx.createLinearGradient(-def.length * 0.52, -7, def.length * 0.56, 8);
-      fuselage.addColorStop(0, def.color);
+      fuselage.addColorStop(0, lockedColor);
       fuselage.addColorStop(0.24, '#e8f7fb');
-      fuselage.addColorStop(0.48, def.color);
-      fuselage.addColorStop(1, def.color);
+      fuselage.addColorStop(0.48, lockedColor);
+      fuselage.addColorStop(1, lockedColor);
       ctx.fillStyle = fuselage;
       ctx.strokeStyle = def.color;
       ctx.shadowColor = def.color;
@@ -1910,10 +1885,9 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           crashReportedRef.current = true;
           onGameOver('Mid-air Collision!', scoreRef.current, landingsCountRef.current);
         }
-      } else if (!isPaused && !isGameOverRef.current && !sectorCompleteRef.current) {
+      } else if (!isPaused && !isGameOverRef.current) {
         cloudDriftRef.current = (cloudDriftRef.current + dt * 0.035) % 1.35;
         missionElapsedRef.current += dt;
-        // Spawn schedule
         const pressure = getTrafficPressure(landingsCountRef.current, currentLevel.targetLandings);
         const spawnInterval = getDynamicSpawnInterval(currentLevel.spawnIntervalMs, pressure);
         if (shouldSpawnAircraft(now, lastSpawnTimeRef.current, spawnInterval)) {
@@ -1940,35 +1914,35 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
 
   // Touch route editing is transactional: selection never destroys the existing course.
   // Only a deliberate, captured drag can replace it; cancellation restores the exact snapshot.
-  const cancelRouteEdit = useCallback(() => {
-    const selectedId = selectedPlaneIdRef.current;
-    const selected = planesRef.current.find((plane) => plane.id === selectedId);
-    const snapshot = routeSnapshotRef.current;
-    if (selected && snapshot && isEditingRouteRef.current) {
-      const restored = restoreRouteSnapshot(snapshot);
-      selected.path = restored.path;
-      selected.landingCleared = restored.landingCleared;
-    }
-    activeDrawPathRef.current = [];
-    routeStartPointRef.current = null;
-    gestureStartPointRef.current = null;
-    activePointerIdRef.current = null;
-    routeSnapshotRef.current = null;
-    isEditingRouteRef.current = false;
-    draftLandingClearedRef.current = false;
-    draftHazardViolationRef.current = false;
+  const cancelStroke = useCallback((pointerId?: number) => {
+    const strokes = pointerId === undefined
+      ? [...strokesRef.current.values()]
+      : [strokesRef.current.get(pointerId)].filter((stroke): stroke is ActiveStroke => Boolean(stroke));
+    strokes.forEach((stroke) => {
+      const plane = planesRef.current.find((item) => item.id === stroke.planeId);
+      if (plane && stroke.isEditing) {
+        const restored = restoreRouteSnapshot(stroke.snapshot);
+        plane.path = restored.path;
+        plane.landingCleared = restored.landingCleared;
+      }
+      strokesRef.current.delete(stroke.pointerId);
+    });
+    if (strokesRef.current.size === 0) selectedPlaneIdRef.current = null;
   }, []);
+
+  const cancelRouteEdit = useCallback(() => {
+    cancelStroke();
+  }, [cancelStroke]);
 
   const handlePointerDown = (clientX: number, clientY: number, pointerId: number) => {
     if (isPaused || isGameOverRef.current) return;
-    if (activePointerIdRef.current !== null) return;
+    if (strokesRef.current.has(pointerId)) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    // Find closest aircraft within touch radius, or select its existing route line.
     let closestPlane: AircraftInstance | null = null;
     let minDist = 38;
 
@@ -2000,114 +1974,89 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
       }
     }
 
-    if (closestPlane) {
-      selectedPlaneIdRef.current = closestPlane.id;
-      // Keep the complete existing route intact until an intentional drag has ended.
-      routeStartPointRef.current = { x: closestPlane.x, y: closestPlane.y };
-      gestureStartPointRef.current = { x, y };
-      activePointerIdRef.current = pointerId;
-      routeSnapshotRef.current = cloneRouteSnapshot(closestPlane.path, closestPlane.landingCleared);
-      activeDrawPathRef.current = [];
-      isEditingRouteRef.current = false;
-      draftLandingClearedRef.current = false;
-      draftHazardViolationRef.current = false;
-      sounds.playSelect();
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } else {
-      selectedPlaneIdRef.current = null;
-      activeDrawPathRef.current = [];
-      routeStartPointRef.current = null;
-      gestureStartPointRef.current = null;
-      activePointerIdRef.current = null;
-      routeSnapshotRef.current = null;
-      draftHazardViolationRef.current = false;
+    if (!closestPlane) return;
+    const planeInUse = [...strokesRef.current.values()].some((stroke) => stroke.planeId === closestPlane.id);
+    if (planeInUse) return;
+
+    selectedPlaneIdRef.current = closestPlane.id;
+    strokesRef.current.set(pointerId, {
+      pointerId,
+      planeId: closestPlane.id,
+      drawPath: [],
+      routeStart: { x: closestPlane.x, y: closestPlane.y },
+      gestureStart: { x, y },
+      snapshot: cloneRouteSnapshot(closestPlane.path, closestPlane.landingCleared),
+      isEditing: false,
+      draftLandingCleared: false,
+      draftHazardViolation: false,
+    });
+    sounds.playSelect();
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
   const handlePointerMove = (clientX: number, clientY: number, pointerId: number) => {
-    if (!selectedPlaneIdRef.current || activePointerIdRef.current !== pointerId) return;
+    const stroke = strokesRef.current.get(pointerId);
+    if (!stroke) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-
     const currentPoint = { x, y };
-    const gestureStart = gestureStartPointRef.current;
-    if (!isEditingRouteRef.current) {
-      if (!gestureStart || !hasRouteEditIntent(gestureStart, currentPoint)) return;
-      isEditingRouteRef.current = true;
-      activeDrawPathRef.current = [currentPoint];
+
+    if (!stroke.isEditing) {
+      if (!hasRouteEditIntent(stroke.gestureStart, currentPoint)) return;
+      stroke.isEditing = true;
+      stroke.drawPath = [currentPoint];
     } else {
-      const path = activeDrawPathRef.current;
-      const last = path[path.length - 1];
-      const dist = Math.sqrt((last.x - x) * (last.x - x) + (last.y - y) * (last.y - y));
-      if (dist > 8) {
-        path.push(currentPoint);
-      }
+      const last = stroke.drawPath[stroke.drawPath.length - 1];
+      if (Math.hypot(last.x - x, last.y - y) > 8) stroke.drawPath.push(currentPoint);
     }
 
-    const plane = planesRef.current.find((item) => item.id === selectedPlaneIdRef.current);
-    const routeStart = routeStartPointRef.current;
-    const matchingRunway = plane && getAssignedRunway(plane.type, runwaysRef.current);
-    if (plane && routeStart && matchingRunway) {
-      const candidateRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
-      const hazard = routeIntersectsMissionHazard(
-        routeStart,
-        candidateRoute,
-        getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
-      );
-      draftHazardViolationRef.current = Boolean(hazard);
-      draftLandingClearedRef.current = !hazard
-        && validateLandingRoute(routeStart, candidateRoute, matchingRunway).isLocked;
-    }
+    const plane = planesRef.current.find((item) => item.id === stroke.planeId);
+    if (!plane) return;
+    const candidateRoute = preservePlayerDrawnRoute(stroke.routeStart, stroke.drawPath);
+    const hazard = routeIntersectsMissionHazard(
+      stroke.routeStart,
+      candidateRoute,
+      getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
+    );
+    const destination = resolveRouteDestination(plane.type, stroke.routeStart, candidateRoute, runwaysRef.current);
+    stroke.draftHazardViolation = Boolean(hazard);
+    stroke.draftLandingCleared = Boolean(!hazard && destination?.validation.isLocked);
   };
 
   const handlePointerUp = (pointerId: number, clientX?: number, clientY?: number) => {
-    if (activePointerIdRef.current !== pointerId) return;
+    const stroke = strokesRef.current.get(pointerId);
+    if (!stroke) return;
     if (typeof clientX === 'number' && typeof clientY === 'number') {
       handlePointerMove(clientX, clientY, pointerId);
     }
-    if (selectedPlaneIdRef.current) {
-      const plane = planesRef.current.find(p => p.id === selectedPlaneIdRef.current);
-      if (plane && isEditingRouteRef.current) {
-        const routeStart = routeStartPointRef.current ?? { x: plane.x, y: plane.y };
-        const playerRoute = preservePlayerDrawnRoute(routeStart, activeDrawPathRef.current);
-        if (playerRoute.length > 0) {
-          const matchingRunway = getAssignedRunway(plane.type, runwaysRef.current);
-          const hazard = routeIntersectsMissionHazard(
-            routeStart,
-            playerRoute,
-            getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
-          );
-          const landingValidation = matchingRunway
-            ? validateLandingRoute(routeStart, playerRoute, matchingRunway)
-            : undefined;
-          // A crossing of the correct coloured corridor is the player's intentional handoff.
-          // Keep the player line up to that exact crossing, rather than forcing them to lift
-          // their finger on a tiny anchor point or replacing the path with an automatic curve.
-          plane.path = landingValidation?.isLocked
-            ? routeThroughLandingCapture(playerRoute, landingValidation)
-            : playerRoute;
-          plane.landingCleared = Boolean(!hazard && landingValidation?.isLocked);
-          sounds.playSelect();
-        } else if (routeSnapshotRef.current) {
-          const restored = restoreRouteSnapshot(routeSnapshotRef.current);
-          plane.path = restored.path;
-          plane.landingCleared = restored.landingCleared;
-        }
+    const plane = planesRef.current.find((item) => item.id === stroke.planeId);
+    if (plane && stroke.isEditing) {
+      const playerRoute = preservePlayerDrawnRoute(stroke.routeStart, stroke.drawPath);
+      if (playerRoute.length > 0) {
+        const hazard = routeIntersectsMissionHazard(
+          stroke.routeStart,
+          playerRoute,
+          getMissionHazards(currentLevel.mission, dimensions.width, dimensions.height, missionElapsedRef.current),
+        );
+        const destination = resolveRouteDestination(plane.type, stroke.routeStart, playerRoute, runwaysRef.current);
+        plane.path = destination?.validation.isLocked
+          ? routeThroughLandingCapture(playerRoute, destination.validation)
+          : playerRoute;
+        plane.landingCleared = Boolean(!hazard && destination?.validation.isLocked);
+        plane.committedRunwayId = plane.landingCleared ? destination?.runway.id : undefined;
+        sounds.playSelect();
+      } else {
+        const restored = restoreRouteSnapshot(stroke.snapshot);
+        plane.path = restored.path;
+        plane.landingCleared = restored.landingCleared;
       }
     }
-    activeDrawPathRef.current = [];
-    routeStartPointRef.current = null;
-    gestureStartPointRef.current = null;
-    activePointerIdRef.current = null;
-    routeSnapshotRef.current = null;
-    isEditingRouteRef.current = false;
-    draftLandingClearedRef.current = false;
-    draftHazardViolationRef.current = false;
+    strokesRef.current.delete(pointerId);
   };
 
   // Installed PWA sessions can be interrupted by a call, lock screen, or app switch.
@@ -2144,9 +2093,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
           plane.path = plane.path.map(scalePoint);
           if (plane.landingEntry) plane.landingEntry = scalePoint(plane.landingEntry);
         });
-        activeDrawPathRef.current = activeDrawPathRef.current.map(scalePoint);
-        if (routeStartPointRef.current) routeStartPointRef.current = scalePoint(routeStartPointRef.current);
-        if (gestureStartPointRef.current) gestureStartPointRef.current = scalePoint(gestureStartPointRef.current);
+        strokesRef.current.forEach((stroke) => {
+          stroke.drawPath = stroke.drawPath.map(scalePoint);
+          stroke.routeStart = scalePoint(stroke.routeStart);
+          stroke.gestureStart = scalePoint(stroke.gestureStart);
+        });
         return { width, height };
       });
       updateRunwayCoordinates(width, height);
@@ -2170,11 +2121,10 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     crashEffectRef.current = null;
     crashReportedRef.current = false;
     activeConflictsRef.current = [];
-    sectorCompleteRef.current = false;
+    sectorStarAwardedRef.current = false;
     missionElapsedRef.current = 0;
     missionWarningCooldownRef.current = 0;
     missionFailureReportedRef.current = false;
-    draftHazardViolationRef.current = false;
     cancelRouteEdit();
     lastSpawnTimeRef.current = performance.now();
     const firstFlight = setTimeout(() => {
@@ -2197,25 +2147,27 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
             touchAction: 'none',
           }}
           onPointerDown={(event: any) => {
-            if (event.isPrimary === false) return;
+            event.preventDefault?.();
             handlePointerDown(event.clientX, event.clientY, event.pointerId);
-            if (activePointerIdRef.current === event.pointerId) {
+            if (strokesRef.current.has(event.pointerId)) {
               event.currentTarget.setPointerCapture?.(event.pointerId);
             }
           }}
           onPointerMove={(event: any) => {
-            if (event.isPrimary === false) return;
             handlePointerMove(event.clientX, event.clientY, event.pointerId);
           }}
           onPointerUp={(event: any) => {
-            if (event.isPrimary === false) return;
             handlePointerUp(event.pointerId, event.clientX, event.clientY);
             if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
               event.currentTarget.releasePointerCapture?.(event.pointerId);
             }
           }}
-          onPointerCancel={cancelRouteEdit}
-          onLostPointerCapture={cancelRouteEdit}
+          onPointerCancel={(event: any) => {
+            cancelStroke(event.pointerId);
+          }}
+          onLostPointerCapture={(event: any) => {
+            if (strokesRef.current.has(event.pointerId)) cancelStroke(event.pointerId);
+          }}
         />
       ) : (
         <View style={{ width: dimensions.width, height: dimensions.height }} />
@@ -2230,7 +2182,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#061a29',
+    backgroundColor: '#1a6f88',
     overflow: 'hidden',
     borderRadius: 24,
     borderWidth: 1.5,

@@ -38,6 +38,7 @@ export default function GameScreen() {
   const [showGameOver, setShowGameOver] = useState(false);
   const [gameOverReason, setGameOverReason] = useState('');
   const [showLevelComplete, setShowLevelComplete] = useState(false);
+  const [sectorCleared, setSectorCleared] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showAchievementsModal, setShowAchievementsModal] = useState(false);
   const [showSectorMap, setShowSectorMap] = useState(false);
@@ -50,11 +51,11 @@ export default function GameScreen() {
   const currentLevel: GameLevel = LEVELS[levelIndex] || LEVELS[0];
   const trafficLoad = currentLevel.difficultyLabel;
   const legendItems: Array<{ types: AircraftType[]; color: string; label: string }> = [
-    { types: ['jet', 'fighter', 'supersonic'] as AircraftType[], color: '#00E5FF', label: 'JET / FTR / SST → R34' },
-    { types: ['propeller', 'cargo'] as AircraftType[], color: '#FFB300', label: 'PROP / CARGO → R28' },
-    { types: ['seaplane'] as AircraftType[], color: '#00E676', label: 'SEAPLANE → BAY' },
-    { types: ['helicopter', 'tiltrotor'] as AircraftType[], color: '#C86BFF', label: 'HELI / VTOL → H1' },
-    { types: ['zeppelin'] as AircraftType[], color: '#FF5CD6', label: 'AIRSHIP → M1' },
+    { types: ['jet', 'fighter', 'supersonic'] as AircraftType[], color: '#00E5FF', label: 'CYAN → runway' },
+    { types: ['propeller', 'cargo'] as AircraftType[], color: '#FFB300', label: 'AMBER → runway' },
+    { types: ['seaplane'] as AircraftType[], color: '#00E676', label: 'GREEN → bay' },
+    { types: ['helicopter', 'tiltrotor'] as AircraftType[], color: '#C86BFF', label: 'VIOLET → H1' },
+    { types: ['zeppelin'] as AircraftType[], color: '#FF5CD6', label: 'PINK → M1' },
   ].filter((item) => item.types.some((type) => currentLevel.allowedTypes.includes(type)));
 
   useEffect(() => {
@@ -145,7 +146,7 @@ export default function GameScreen() {
   }, []);
 
   const handleLevelComplete = useCallback((nextLevel: number) => {
-    setShowLevelComplete(true);
+    setSectorCleared(true);
     setStats((prev) => {
       const completedSector = nextLevel;
       const achievementIds = getCampaignAchievementIds(completedSector - 1);
@@ -175,6 +176,7 @@ export default function GameScreen() {
     if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
     setShowGameOver(false);
     setShowLevelComplete(false);
+    setSectorCleared(false);
     setScore(0);
     authoritativeScoreRef.current = 0;
     setLandings(0);
@@ -185,6 +187,7 @@ export default function GameScreen() {
 
   const nextLevelProceed = () => {
     setShowLevelComplete(false);
+    setSectorCleared(false);
     setScore(0);
     authoritativeScoreRef.current = 0;
     setLandings(0);
@@ -203,6 +206,7 @@ export default function GameScreen() {
     setShowSectorMap(false);
     setShowGameOver(false);
     setShowLevelComplete(false);
+    setSectorCleared(false);
     setLevelIndex(index);
     setScore(0);
     authoritativeScoreRef.current = 0;
@@ -318,9 +322,9 @@ export default function GameScreen() {
         <View style={styles.metricDivider} />
 
         <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>LANDINGS</Text>
+          <Text style={styles.metricLabel}>{landings >= currentLevel.targetLandings ? 'STAR' : 'LANDINGS'}</Text>
           <Text style={styles.metricValueHighlight}>
-            {landings} / {currentLevel.targetLandings}
+            {landings >= currentLevel.targetLandings ? `★ ${landings}` : `${landings} / ${currentLevel.targetLandings}`}
           </Text>
         </View>
 
@@ -365,6 +369,18 @@ export default function GameScreen() {
           onLevelComplete={handleLevelComplete}
           onAutoPause={handleAutoPause}
         />
+
+        {sectorCleared && !isPaused && (
+          <View style={styles.starBanner} pointerEvents="box-none">
+            <Text style={styles.starBannerTitle}>★ SECTOR CLEARED</Text>
+            <Text style={styles.starBannerCopy}>Traffic keeps coming. Land for score or jump ahead.</Text>
+            <TouchableOpacity style={styles.starBannerButton} onPress={nextLevelProceed} activeOpacity={0.8}>
+              <Text style={styles.starBannerButtonText}>
+                {levelIndex < LEVELS.length - 1 ? 'NEXT SECTOR' : 'REPLAY FLEET'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {isPaused && (
           <View style={styles.pauseOverlay}>
@@ -517,31 +533,27 @@ export default function GameScreen() {
             <Text style={styles.dialogTitle}>CONTROLLER BRIEFING</Text>
             <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
               <Text style={styles.infoParagraph}>
-                👉 <Text style={styles.bold}>Draw the Exact Flight Path:</Text> Touch any aircraft—or its dashed route line—and draw the route you want. Every point you draw is kept. Guide it through the matching landing corridor to land.
+                👉 <Text style={styles.bold}>Draw a path:</Text> Touch an aircraft and drag a line to its matching-colour destination. Two fingers can steer two planes at once. Loops and holding circles are allowed.
               </Text>
               <Text style={styles.infoParagraph}>
-                🛬 <Text style={styles.bold}>Match Corridors:</Text>
-                {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Jets</Text> & <Text style={{ color: '#00E5FF' }}>Cyan Supersonic</Text> → Runway 34 (Center)
-                {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan Fighters</Text> → Runway 34 (Center)
-                {'\n'}• <Text style={{ color: '#FFB300' }}>Amber Propellers & Cargo</Text> → Runway 28 (Diagonal)
-                {'\n'}• <Text style={{ color: '#00E676' }}>Green Seaplanes</Text> → Blue Lagoon Bay
-                {'\n'}• <Text style={{ color: '#C86BFF' }}>Violet Helicopters & Tiltrotors</Text> → Helipad H1 (Square pad)
-                {'\n'}• <Text style={{ color: '#FF5CD6' }}>Pink Airships</Text> → Mooring M1 (oval beacon)
+                🛬 <Text style={styles.bold}>Colour match:</Text>
+                {'\n'}• <Text style={{ color: '#00E5FF' }}>Cyan</Text> aircraft → any cyan runway, either end
+                {'\n'}• <Text style={{ color: '#FFB300' }}>Amber</Text> aircraft → any amber runway, either end
+                {'\n'}• <Text style={{ color: '#00E676' }}>Green seaplanes</Text> → lagoon
+                {'\n'}• <Text style={{ color: '#C86BFF' }}>Violet helicopters</Text> → H1 from any direction
+                {'\n'}• <Text style={{ color: '#FF5CD6' }}>Pink airships</Text> → M1
               </Text>
               <Text style={styles.infoParagraph}>
-                🎯 <Text style={styles.bold}>One Aircraft, One Runway:</Text> Every aircraft has one fixed, color-matched destination. A plane cannot lock or land on any other course.
+                ✅ <Text style={styles.bold}>Land on the coloured strip:</Text> The aircraft turns white when your line reaches the matching pavement. Crossing the strip is enough — there is no hidden geometry test.
               </Text>
               <Text style={styles.infoParagraph}>
-                🚁 <Text style={styles.bold}>Vertical Clearance:</Text> Helicopters and tiltrotors can approach H1 from any direction. Airships can approach M1 from any direction. The landing lock turns green as soon as the line reaches the matching violet or pink destination.
+                ⭐ <Text style={styles.bold}>Endless watch:</Text> Hit the landing star to unlock the next sector, then keep playing until a collision. Neglected aircraft that leave the screen fail the watch.
               </Text>
               <Text style={styles.infoParagraph}>
-                ✅ <Text style={styles.bold}>Live Landing Lock:</Text> While your finger is still down, the final part of your drawn line turns green and shows “CLEARED TO LAND” only when it reaches the correct landing threshold in the correct direction. The game never changes your line.
+                🌍 <Text style={styles.bold}>Missions:</Text> Tornadoes block the strip, fuel timers mark priority arrivals (lost aircraft, not an instant game over), wind drifts flights, and fire/terrain are no-fly zones.
               </Text>
               <Text style={styles.infoParagraph}>
-                🌍 <Text style={styles.bold}>Campaign Sectors:</Text> Tap the sector badge above to open the 18-sector campaign map. Every sector combines a new terrain layout, fleet mix, traffic pressure, and an active mission such as crosswind, fuel priority, weather, low visibility, or restricted airspace.
-              </Text>
-              <Text style={styles.infoParagraph}>
-                ⚠️ <Text style={styles.bold}>Proximity Alarms:</Text> Keep aircraft separated! Yellow halos mean caution; flashing red halos signal imminent mid-air collision.
+                ⚠️ <Text style={styles.bold}>Proximity Alarms:</Text> Yellow halos mean caution; flashing red halos signal imminent mid-air collision. Landing aircraft still occupy space.
               </Text>
             </ScrollView>
 
@@ -616,7 +628,7 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#030c14',
+    backgroundColor: '#0a2a32',
     paddingHorizontal: 10,
     paddingBottom: 6,
     width: '100%',
@@ -794,6 +806,45 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     marginVertical: 4,
+  },
+  starBanner: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 12,
+    backgroundColor: 'rgba(8, 42, 28, 0.92)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#66f1ca',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    zIndex: 8,
+    alignItems: 'center',
+    gap: 4,
+  },
+  starBannerTitle: {
+    color: '#a5f7d0',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  starBannerCopy: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  starBannerButton: {
+    marginTop: 4,
+    backgroundColor: '#66f1ca',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+  starBannerButtonText: {
+    color: '#073226',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,

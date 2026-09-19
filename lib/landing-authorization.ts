@@ -1,39 +1,42 @@
 import { isVerticalDestination, type Point, type RunwayZone } from '../constants/game-types';
+import { distanceToLineSegment } from './approach-routing';
 
 export interface LandingAuthorizationInput {
-  /** True only after the player finishes a route that passed the green clearance validator. */
+  /** True only after the player finishes a route that reached a matching-colour destination. */
   landingCleared: boolean;
   /** The last player waypoint has been flown, so the aircraft is not abandoning a live route. */
   routeComplete: boolean;
-  /** Aircraft is inside its own destination's touchdown capture zone. */
+  /** Aircraft is on the matching coloured surface. */
   insideCapture: boolean;
-  /** The player-drawn final direction must agree with the destination heading. */
+  /** Informational; paved landings accept either direction of the strip. */
   headingDifference: number;
   headingTolerance: number;
-  /** Helicopters are the sole exception: H1 accepts an all-direction vertical descent. */
   isHelipad: boolean;
 }
 
 /**
  * A landing is a player-authorized state transition, never a proximity shortcut.
- * The green route clearance is deliberately required in addition to physical arrival.
+ * Once the green path has reached the matching strip, physical arrival is enough.
  */
 export function canCommitLanding(input: LandingAuthorizationInput): boolean {
-  if (!input.landingCleared || !input.routeComplete || !input.insideCapture) return false;
-  return input.isHelipad || input.headingDifference <= input.headingTolerance;
+  return input.landingCleared && input.routeComplete && input.insideCapture;
 }
 
-/**
- * Route clearance can be forgiving for touch play, but a visible landing animation starts
- * only near the actual threshold. This prevents an aircraft from being pulled sideways into a runway.
- */
 export function getPhysicalTouchdownRadius(runway: RunwayZone): number {
   return isVerticalDestination(runway)
-    ? runway.touchdownRadius + 6
-    : Math.min(48, runway.touchdownRadius + 12);
+    ? runway.touchdownRadius + 10
+    : Math.max(28, runway.touchdownRadius * 0.82);
 }
 
+/** True when the aircraft is on the coloured pavement, water lane, pad, or mooring. */
 export function isInsidePhysicalTouchdown(point: Point, runway: RunwayZone): boolean {
-  return Math.hypot(point.x - runway.startX, point.y - runway.startY)
-    <= getPhysicalTouchdownRadius(runway);
+  if (isVerticalDestination(runway)) {
+    return Math.hypot(point.x - runway.startX, point.y - runway.startY)
+      <= getPhysicalTouchdownRadius(runway);
+  }
+  return distanceToLineSegment(
+    point,
+    { x: runway.startX, y: runway.startY },
+    { x: runway.endX, y: runway.endY },
+  ) <= getPhysicalTouchdownRadius(runway);
 }

@@ -64,12 +64,13 @@ export function getMissionHazards(
       }];
     case 'stormCell':
       return [{
-        id: 'weather-cell', kind: 'storm', label: 'WEATHER CELL',
-        x: boundsWidth * (0.47 + Math.sin(time * 0.18) * 0.13),
-        y: boundsHeight * (0.47 + Math.cos(time * 0.15) * 0.07),
-        radiusX: Math.min(boundsWidth, boundsHeight) * 0.105,
-        radiusY: Math.min(boundsWidth, boundsHeight) * 0.105,
-        rotation: 0, color: '#6EB6FF',
+        id: 'weather-cell', kind: 'storm', label: 'TORNADO',
+        // Drifts across the main approach so the funnel can sit on the strip and block landings.
+        x: boundsWidth * (0.58 + Math.sin(time * 0.22) * 0.10),
+        y: boundsHeight * (0.22 + (Math.sin(time * 0.15) * 0.5 + 0.5) * 0.24),
+        radiusX: Math.min(boundsWidth, boundsHeight) * 0.078,
+        radiusY: Math.min(boundsWidth, boundsHeight) * 0.078,
+        rotation: time * 0.8, color: '#8EC8FF',
       }];
     case 'movingObstacle':
       return [{

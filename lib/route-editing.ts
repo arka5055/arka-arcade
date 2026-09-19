@@ -5,6 +5,18 @@ export interface RouteSnapshot {
   landingCleared: boolean;
 }
 
+export interface ActiveStroke {
+  pointerId: number;
+  planeId: string;
+  drawPath: Point[];
+  routeStart: Point;
+  gestureStart: Point;
+  snapshot: RouteSnapshot;
+  isEditing: boolean;
+  draftLandingCleared: boolean;
+  draftHazardViolation: boolean;
+}
+
 /** Minimum finger travel that distinguishes a deliberate route edit from a selection tap. */
 export const ROUTE_EDIT_INTENT_DISTANCE = 12;
 

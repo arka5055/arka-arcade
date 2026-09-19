@@ -1,4 +1,5 @@
 import { isVerticalDestination, type Point, type RunwayZone } from '../constants/game-types';
+import { distanceToLineSegment } from './approach-routing';
 
 export interface LandingRouteValidation {
   isLocked: boolean;
@@ -9,25 +10,20 @@ export interface LandingRouteValidation {
   isInsideCapture: boolean;
   isHeadingAligned: boolean;
   isOnApproachSide: boolean;
-  /** The player line crosses the finite final-approach gate of its assigned destination. */
+  /** The player line reached the matching coloured surface. */
   isInsideApproachGate: boolean;
   approachGateLength: number;
   approachGateHalfWidth: number;
-  /** Exact intersection of the player line and the real approach gate. */
+  /** First point where the player line meets the destination surface. */
   capturePoint?: Point;
-  /** Segment in [aircraft position, ...route] that contains capturePoint. */
   captureRouteSegmentIndex?: number;
-  /** Signed endpoint distance along runway travel direction; values above zero cross threshold. */
   thresholdProjection: number;
 }
 
 export interface LandingGateGeometry {
   captureRadius: number;
-  /** Distance before the threshold where the visible gate sits. */
   approachGateLength: number;
-  /** Half of the finite gate bar's width. */
   approachGateHalfWidth: number;
-  /** Permits only a tiny touch overshoot; deeper endpoints would make rollout look backward. */
   maxThresholdOvershoot: number;
 }
 
@@ -53,13 +49,33 @@ function getRunwayCoordinates(point: Point, runway: RunwayZone) {
   };
 }
 
-/** A visible, finite gate is intentionally easier than a pixel-sized anchor but never a broad area. */
+function lerp(start: Point, end: Point, t: number): Point {
+  return { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t };
+}
+
+/** Finger-friendly width of the coloured landing surface. */
+export function getDestinationSurfaceRadius(runway: RunwayZone): number {
+  if (isVerticalDestination(runway)) return runway.touchdownRadius + 14;
+  return Math.max(30, runway.touchdownRadius * 0.88);
+}
+
+export function isOnDestinationSurface(point: Point, runway: RunwayZone, padding = 0): boolean {
+  const radius = getDestinationSurfaceRadius(runway) + padding;
+  if (isVerticalDestination(runway)) {
+    return Math.hypot(point.x - runway.startX, point.y - runway.startY) <= radius;
+  }
+  return distanceToLineSegment(
+    point,
+    { x: runway.startX, y: runway.startY },
+    { x: runway.endX, y: runway.endY },
+  ) <= radius;
+}
+
+/** A visible, finite gate is a hint in front of the strip, not the lock itself. */
 export function getLandingGateGeometry(runway: RunwayZone): LandingGateGeometry {
   if (isVerticalDestination(runway)) {
     return {
-      // Vertical arrivals should visibly meet the pad itself. A small finger-friendly halo is
-      // enough; the previous 52px expansion made a green "landing" point look detached from H1.
-      captureRadius: runway.touchdownRadius + 8,
+      captureRadius: runway.touchdownRadius + 14,
       approachGateLength: runway.touchdownRadius + 8,
       approachGateHalfWidth: runway.touchdownRadius + 8,
       maxThresholdOvershoot: runway.touchdownRadius + 14,
@@ -67,10 +83,10 @@ export function getLandingGateGeometry(runway: RunwayZone): LandingGateGeometry 
   }
 
   return {
-    captureRadius: Math.max(92, runway.touchdownRadius + 56),
+    captureRadius: Math.max(48, runway.touchdownRadius + 18),
     approachGateLength: Math.max(78, runway.touchdownRadius + 48),
     approachGateHalfWidth: Math.max(46, runway.touchdownRadius + 12),
-    maxThresholdOvershoot: 14,
+    maxThresholdOvershoot: 24,
   };
 }
 
@@ -99,20 +115,13 @@ export function getLandingGateEndpoints(runway: RunwayZone, geometry = getLandin
   };
 }
 
-function intersectSegments(firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point): Point | undefined {
-  const firstX = firstEnd.x - firstStart.x;
-  const firstY = firstEnd.y - firstStart.y;
-  const secondX = secondEnd.x - secondStart.x;
-  const secondY = secondEnd.y - secondStart.y;
-  const determinant = firstX * secondY - firstY * secondX;
-  if (Math.abs(determinant) < 0.00001) return undefined;
-
-  const deltaX = secondStart.x - firstStart.x;
-  const deltaY = secondStart.y - firstStart.y;
-  const firstT = (deltaX * secondY - deltaY * secondX) / determinant;
-  const secondT = (deltaX * firstY - deltaY * firstX) / determinant;
-  if (firstT < 0 || firstT > 1 || secondT < 0 || secondT > 1) return undefined;
-  return { x: firstStart.x + firstX * firstT, y: firstStart.y + firstY * firstT };
+function headingAlongSegment(start: Point, end: Point, runway: RunwayZone): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (Math.hypot(dx, dy) < 1) return Infinity;
+  const forward = shortestAngleDifference(Math.atan2(dy, dx), runway.heading);
+  const reverse = shortestAngleDifference(Math.atan2(dy, dx), runway.heading + Math.PI);
+  return Math.min(forward, reverse);
 }
 
 function intersectSegmentCircle(start: Point, end: Point, center: Point, radius: number): Point | undefined {
@@ -134,47 +143,65 @@ function intersectSegmentCircle(start: Point, end: Point, center: Point, radius:
   return t === undefined ? undefined : { x: start.x + dx * t, y: start.y + dy * t };
 }
 
-/**
- * Finds a crossing of the *finite* destination gate. A route that passes nearby, is parallel to
- * it, or is aimed at another runway cannot lock. This preserves an anchor-free gesture without
- * allowing the broad, accidental capture region that caused false positive landings.
- */
-function findRouteGateCapture(
-  aircraftPosition: Point,
-  route: readonly Point[],
+function firstSurfaceHitOnSegment(
+  start: Point,
+  end: Point,
   runway: RunwayZone,
-  geometry: LandingGateGeometry,
-  headingTolerance: number,
-): RouteGateCapture | undefined {
-  const points = [aircraftPosition, ...route];
-  const gate = getLandingGateEndpoints(runway, geometry);
-  for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex += 1) {
-    const start = points[segmentIndex];
-    const end = points[segmentIndex + 1];
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    if (Math.hypot(dx, dy) < 1) continue;
-    const headingDifference = shortestAngleDifference(Math.atan2(dy, dx), runway.heading);
-    if (!isVerticalDestination(runway) && headingDifference > headingTolerance) continue;
-
-    const point = isVerticalDestination(runway)
-      ? intersectSegmentCircle(start, end, gate.center, geometry.captureRadius)
-      : intersectSegments(start, end, gate.first, gate.second);
-    if (!point) continue;
-    return {
-      point,
-      segmentIndex,
-      headingDifference,
-      thresholdProjection: getRunwayCoordinates(point, runway).along,
-    };
+): Point | undefined {
+  if (isVerticalDestination(runway)) {
+    const radius = getDestinationSurfaceRadius(runway);
+    const center = { x: runway.startX, y: runway.startY };
+    if (Math.hypot(start.x - center.x, start.y - center.y) <= radius) return { ...start };
+    return intersectSegmentCircle(start, end, center, radius);
+  }
+  if (isOnDestinationSurface(start, runway)) return { ...start };
+  const length = Math.hypot(end.x - start.x, end.y - start.y);
+  if (length < 0.5) return isOnDestinationSurface(end, runway) ? { ...end } : undefined;
+  const steps = Math.max(1, Math.ceil(length / 4));
+  for (let step = 1; step <= steps; step += 1) {
+    const point = lerp(start, end, step / steps);
+    if (isOnDestinationSurface(point, runway)) return point;
   }
   return undefined;
 }
 
 /**
- * Returns only the player-authored portion of the route up to its exact gate crossing. This is
- * not an automatic curve; it merely removes the unnecessary tail after a valid handoff.
+ * Locks when the player line reaches the matching coloured destination — the original
+ * Flight Control / Planes Control rule. Heading is recorded, not required.
  */
+function findRouteSurfaceCapture(
+  aircraftPosition: Point,
+  route: readonly Point[],
+  runway: RunwayZone,
+): RouteGateCapture | undefined {
+  const points = [aircraftPosition, ...route];
+  for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex += 1) {
+    const start = points[segmentIndex];
+    const end = points[segmentIndex + 1];
+    const point = firstSurfaceHitOnSegment(start, end, runway);
+    if (!point) continue;
+    return {
+      point,
+      segmentIndex,
+      headingDifference: headingAlongSegment(start, end, runway),
+      thresholdProjection: getRunwayCoordinates(point, runway).along,
+    };
+  }
+
+  const endpoint = points[points.length - 1];
+  if (endpoint && isOnDestinationSurface(endpoint, runway)) {
+    const previous = points[points.length - 2] ?? aircraftPosition;
+    return {
+      point: { ...endpoint },
+      segmentIndex: Math.max(0, points.length - 2),
+      headingDifference: headingAlongSegment(previous, endpoint, runway),
+      thresholdProjection: getRunwayCoordinates(endpoint, runway).along,
+    };
+  }
+  return undefined;
+}
+
+/** Returns only the player-authored portion of the route up to its exact surface crossing. */
 export function routeThroughLandingCapture(
   route: readonly Point[],
   validation: LandingRouteValidation,
@@ -189,9 +216,8 @@ export function routeThroughLandingCapture(
 }
 
 /**
- * Validates a route by detecting an intersection with the matching finite approach gate. The
- * player can swipe straight through the bar; releasing at any later point still counts. A line
- * must physically cross the gate, so an off-runway point can never create a green landing plan.
+ * A route locks when it meets the matching coloured strip, bay, pad, or mooring.
+ * The visible approach gate remains a hint; it is not a hidden extra exam.
  */
 export function validateLandingRoute(
   aircraftPosition: Point,
@@ -200,7 +226,7 @@ export function validateLandingRoute(
 ): LandingRouteValidation {
   const verticalDestination = isVerticalDestination(runway);
   const geometry = getLandingGateGeometry(runway);
-  const headingTolerance = verticalDestination ? Math.PI : Math.min(Math.PI, runway.headingTolerance + 0.55);
+  const headingTolerance = Math.PI / 2;
 
   if (route.length === 0) {
     return {
@@ -222,13 +248,13 @@ export function validateLandingRoute(
   const endpoint = route[route.length - 1];
   const endpointDistance = Math.hypot(endpoint.x - runway.startX, endpoint.y - runway.startY);
   const thresholdProjection = getRunwayCoordinates(endpoint, runway).along;
-  const capture = findRouteGateCapture(aircraftPosition, route, runway, geometry, headingTolerance);
-  const isInsideCapture = endpointDistance <= geometry.captureRadius;
+  const capture = findRouteSurfaceCapture(aircraftPosition, route, runway);
+  const isInsideCapture = isOnDestinationSurface(endpoint, runway);
   const isInsideApproachGate = Boolean(capture);
-  const isOnApproachSide = verticalDestination || Boolean(capture && capture.thresholdProjection <= 0);
   const headingDifference = capture?.headingDifference ?? Infinity;
-  const isHeadingAligned = verticalDestination || Boolean(capture && capture.headingDifference <= headingTolerance);
-  const isLocked = isInsideApproachGate && isOnApproachSide && isHeadingAligned;
+  const isHeadingAligned = verticalDestination || headingDifference <= headingTolerance;
+  const isOnApproachSide = Boolean(capture);
+  const isLocked = Boolean(capture);
 
   return {
     isLocked,

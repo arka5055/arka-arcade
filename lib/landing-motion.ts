@@ -1,4 +1,4 @@
-import type { Point, RunwayZone } from '@/constants/game-types';
+import { isVerticalDestination, type Point, type RunwayZone } from '../constants/game-types';
 
 /** Returns the shortest signed rotation from one heading to another. */
 function signedAngleDifference(from: number, to: number): number {
@@ -6,6 +6,10 @@ function signedAngleDifference(from: number, to: number): number {
   while (difference < -Math.PI) difference += Math.PI * 2;
   while (difference > Math.PI) difference -= Math.PI * 2;
   return difference;
+}
+
+function shortestAngleDifference(first: number, second: number): number {
+  return Math.abs(signedAngleDifference(first, second));
 }
 
 /**
@@ -36,12 +40,32 @@ export function getRunwayProgress(point: Point, runway: RunwayZone): number {
     + (point.y - runway.startY) * Math.sin(runway.heading);
 }
 
+export function getRunwayLength(runway: RunwayZone): number {
+  return Math.hypot(runway.endX - runway.startX, runway.endY - runway.startY);
+}
+
+/** Uses the strip direction that matches the aircraft's nose, so either end is legal. */
+export function alignRunwayToHeading(runway: RunwayZone, heading: number): RunwayZone {
+  if (isVerticalDestination(runway)) return runway;
+  const reverseHeading = runway.heading + Math.PI;
+  if (shortestAngleDifference(heading, reverseHeading) < shortestAngleDifference(heading, runway.heading)) {
+    return {
+      ...runway,
+      startX: runway.endX,
+      startY: runway.endY,
+      endX: runway.startX,
+      endY: runway.startY,
+      heading: reverseHeading,
+    };
+  }
+  return runway;
+}
+
 /**
- * A cleared course ends at a broad gate. Aim just beyond the threshold instead of directly at
- * its centre, so heading converges to the runway direction and no final-frame U-turn is needed.
+ * Aim just beyond the threshold so heading converges to the strip without a U-turn.
  */
 export function getFinalGlideAimPoint(runway: RunwayZone): Point {
-  if (runway.type === 'helipad' || runway.type === 'mooring') {
+  if (isVerticalDestination(runway)) {
     return { x: runway.startX, y: runway.startY };
   }
   const aimDistance = Math.min(26, Math.max(14, runway.touchdownRadius * 0.6));
@@ -51,7 +75,10 @@ export function getFinalGlideAimPoint(runway: RunwayZone): Point {
   };
 }
 
-/** A fixed animation may begin only before (or exactly at) the physical threshold. */
+/** Landing may begin anywhere on the matching strip, including either threshold. */
 export function canBeginForwardRunwayLanding(point: Point, runway: RunwayZone): boolean {
-  return getRunwayProgress(point, runway) <= 0.5;
+  if (isVerticalDestination(runway)) return true;
+  const progress = getRunwayProgress(point, runway);
+  const length = getRunwayLength(runway);
+  return progress >= -56 && progress <= length + 12;
 }

@@ -110,6 +110,10 @@ export interface AircraftInstance {
   landingEntry?: Point;
   landingEntrySpeed?: number;
   landingEntryHeading?: number;
+  /** Colour-matched destination the player actually drew to; may differ from the default strip. */
+  committedRunwayId?: string;
+  /** True after the aircraft has been fully inside the playable field; leaving afterwards is a fail. */
+  hasEnteredPlayfield?: boolean;
   /** Remaining seconds in a fuel-priority mission; undefined means no fuel timer. */
   fuelRemaining?: number;
   warningLevel: 'safe' | 'caution' | 'critical';
