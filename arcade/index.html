@@ -97,6 +97,7 @@
       object-fit: cover;
       display: block;
     }
+    .coffee .shot { background: radial-gradient(120% 80% at 50% 110%, #1a6a6a 0%, #083d42 62%); }
     .skyline .shot { background: radial-gradient(120% 80% at 50% 110%, #1a4a5c 0%, #071018 62%); }
     .tracks .shot { background: radial-gradient(120% 80% at 50% 110%, #3d5a32 0%, #10180f 62%); }
     .copy { padding: 18px 18px 20px; }
@@ -136,10 +137,10 @@
     }
     .game:active { transform: scale(0.985); }
     .game:active .cta { opacity: 0.86; }
-    @media (min-width: 720px) {
-      .page { max-width: 880px; padding-top: 48px; }
-      .games { grid-template-columns: 1fr 1fr; }
-      .game { grid-template-rows: 220px auto; }
+    @media (min-width: 900px) {
+      .page { max-width: 1080px; padding-top: 48px; }
+      .games { grid-template-columns: 1fr 1fr 1fr; }
+      .game { grid-template-rows: 180px auto; }
     }
     @media (prefers-reduced-motion: reduce) {
       .game:active { transform: none; }
@@ -155,7 +156,7 @@
     </header>
 
     <section class="games" aria-label="Games">
-      <a class="game coffee" href="https://coffee-rush.grok.me/">
+      <a class="game coffee" href="/coffee/">
         <div class="shot">
           <img src="/media/coffee.jpg" alt="" width="800" height="420">
         </div>

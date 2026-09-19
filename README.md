@@ -1,23 +1,26 @@
 # Arcade
 
-One repository for the launcher and the games, published together.
+One repo. One launcher. Three games.
 
-- **Launcher** — pick a game
-- **Coffee Rush** — two-minute barista shift
-- **Skyline Signal** — touch-first air-traffic control
-- **Thought Tracks** — divided-attention train routing
+**Play:** [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/)
 
-## Play
-
-The combined launcher is **[https://coffee-rush.grok.me/](https://coffee-rush.grok.me/)**.
-
-| | Play |
+| | Path |
 | --- | --- |
-| Arcade | [coffee-rush.grok.me](https://coffee-rush.grok.me/) |
-| Coffee Rush | [coffee-rush.grok.me/coffee](https://coffee-rush.grok.me/coffee) |
-| Skyline Signal | [coffee-rush.grok.me/skyline/](https://coffee-rush.grok.me/skyline/) |
-| Thought Tracks | [coffee-rush.grok.me/tracks/](https://coffee-rush.grok.me/tracks/) |
+| Launcher | `/` |
+| Coffee Rush | `/coffee/` |
+| Skyline Signal | `/skyline/` |
+| Thought Tracks | `/tracks/` |
 
-Source of truth: **[github.com/arka5055/coffee-rush](https://github.com/arka5055/coffee-rush)**
+## Layout
 
-This repo still holds Skyline Signal source (`app/`) and Thought Tracks (`thought-tracks/`).
+```
+arcade/            launcher
+arcade/coffee/     Coffee Rush
+arcade/skyline/    Skyline Signal
+thought-tracks/    Thought Tracks
+app/               Skyline Expo source
+```
+
+## Source
+
+https://github.com/arka5055/skyline-signal

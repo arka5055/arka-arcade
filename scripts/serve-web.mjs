@@ -8,6 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARCADE = path.join(ROOT, "arcade");
 const TRACKS = path.join(ROOT, "thought-tracks");
 const SKYLINE = path.join(ARCADE, "skyline");
+const COFFEE = path.join(ARCADE, "coffee");
 const GROK = path.join(ROOT, "public", "__grok");
 const PUBLIC = path.join(ROOT, "public");
 const port = Number(process.env.PORT || 8080);
@@ -55,6 +56,9 @@ function mapUrl(urlPath) {
   if (urlPath === "/skyline" || urlPath.startsWith("/skyline/")) {
     return { root: SKYLINE, rel: urlPath.slice("/skyline".length).replace(/^\/+/, ""), spa: "index.html" };
   }
+  if (urlPath === "/coffee" || urlPath.startsWith("/coffee/")) {
+    return { root: COFFEE, rel: urlPath.slice("/coffee".length).replace(/^\/+/, ""), spa: "index.html" };
+  }
   return { root: ARCADE, rel: urlPath.replace(/^\/+/, ""), spa: "index.html" };
 }
 
@@ -94,5 +98,5 @@ server.on("error", (err) => {
   process.exit(1);
 });
 server.listen({ port, host: "0.0.0.0", ipv6Only: false }, () => {
-  console.log(`[arcade] hub ${ARCADE} · tracks ${TRACKS} · skyline ${SKYLINE} on 0.0.0.0:${port}`);
+  console.log(`[arcade] hub ${ARCADE} · coffee ${COFFEE} · tracks ${TRACKS} · skyline ${SKYLINE} on 0.0.0.0:${port}`);
 });

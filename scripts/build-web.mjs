@@ -143,6 +143,28 @@ self.addEventListener('fetch', (event) => {
 if (!existsSync(join(ARCADE, "index.html"))) throw new Error("arcade/index.html is missing");
 if (!existsSync(join(TRACKS, "index.html"))) throw new Error("thought-tracks/index.html is missing");
 
+function bundleCoffee() {
+  const entry = join(ARCADE, "coffee", "src", "main.tsx");
+  if (!existsSync(entry)) throw new Error("arcade/coffee/src/main.tsx is missing");
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(ROOT, "node_modules", "esbuild", "bin", "esbuild"),
+      entry,
+      "--bundle",
+      `--outfile=${join(ARCADE, "coffee", "app.js")}`,
+      "--format=iife",
+      "--jsx=automatic",
+      "--platform=browser",
+      "--target=es2020",
+      "--minify",
+    ],
+    { cwd: ROOT, stdio: "inherit" },
+  );
+  if (result.status !== 0) throw new Error("Coffee Rush bundle failed");
+}
+
+bundleCoffee();
 ensureSkyline();
 rewriteSkylinePaths();
 writeSkylineWorker();
