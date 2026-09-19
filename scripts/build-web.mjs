@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -11,41 +11,57 @@ const DIST = join(ROOT, "dist");
 const VERCEL_OUT = join(ROOT, ".vercel", "output");
 const VERCEL_STATIC = join(VERCEL_OUT, "static");
 
-function exportIfNeeded() {
-  const source = existsSync(join(PWA_RELEASE, "index.html"))
-    ? PWA_RELEASE
-    : existsSync(join(DIST_WEB, "index.html"))
-      ? DIST_WEB
-      : null;
-  if (source) return source;
-  const result = spawnSync(
-    "npx",
-    ["expo", "export", "--platform", "web", "--output-dir", DIST_WEB],
-    { cwd: ROOT, stdio: "inherit", env: process.env },
-  );
-  if (result.status !== 0) {
-    throw new Error("expo export failed");
-  }
-  return DIST_WEB;
+function hasIndex(dir) {
+  return existsSync(join(dir, "index.html"));
 }
 
 function copyDir(from, to) {
-  rmSync(to, { recursive: true, force: true });
-  mkdirSync(dirname(to), { recursive: true });
-  cpSync(from, to, { recursive: true });
+  const src = resolve(from);
+  const dest = resolve(to);
+  if (src === dest) return;
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(src, dest, { recursive: true });
 }
 
-const source = exportIfNeeded();
-copyDir(source, DIST_WEB);
-copyDir(source, DIST);
+function expoExport() {
+  const env = {
+    ...process.env,
+    CI: process.env.CI || "1",
+    EXPO_NO_TELEMETRY: "1",
+    EXPO_NO_DOTENV: "1",
+  };
+  const result = spawnSync(
+    "npx",
+    ["expo", "export", "--platform", "web", "--output-dir", DIST_WEB],
+    { cwd: ROOT, stdio: "inherit", env },
+  );
+  if (result.status !== 0) {
+    throw new Error(`expo export failed with status ${result.status ?? "null"}`);
+  }
+  if (!hasIndex(DIST_WEB)) {
+    throw new Error("expo export finished without index.html");
+  }
+}
 
-rmSync(VERCEL_OUT, { recursive: true, force: true });
+if (hasIndex(PWA_RELEASE) && !hasIndex(DIST_WEB)) {
+  copyDir(PWA_RELEASE, DIST_WEB);
+}
+
+if (!hasIndex(DIST_WEB)) {
+  expoExport();
+}
+
+copyDir(DIST_WEB, DIST);
+
+rmSync(join(VERCEL_OUT, "functions"), { recursive: true, force: true });
+rmSync(VERCEL_STATIC, { recursive: true, force: true });
 mkdirSync(VERCEL_STATIC, { recursive: true });
-cpSync(source, VERCEL_STATIC, { recursive: true });
+cpSync(DIST_WEB, VERCEL_STATIC, { recursive: true });
 
 writeFileSync(
   join(VERCEL_OUT, "config.json"),
-  JSON.stringify(
+  `${JSON.stringify(
     {
       version: 3,
       routes: [
@@ -65,25 +81,7 @@ writeFileSync(
     },
     null,
     2,
-  ),
+  )}\n`,
 );
 
-writeFileSync(
-  join(ROOT, "vercel.json"),
-  JSON.stringify(
-    {
-      outputDirectory: "dist-web",
-      rewrites: [{ source: "/(.*)", destination: "/index.html" }],
-      headers: [
-        {
-          source: "/service-worker.js",
-          headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
-        },
-      ],
-    },
-    null,
-    2,
-  ),
-);
-
-console.log(`[skyline] built static PWA from ${source}`);
+console.log(`[skyline] built static PWA from ${DIST_WEB}`);
