@@ -6,9 +6,7 @@ The game uses a Canvas-based tactical board, player-drawn flight routes, finite 
 
 ## Live PWA
 
-Play the current build at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/).
-
-The installable Home Screen PWA stays at [arka5055.github.io](https://arka5055.github.io/), so existing iPhone installations keep the same URL.
+The game is at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/). Add that URL to the iPhone Home Screen from Safari.
 
 ## Local development
 
@@ -49,21 +47,14 @@ The gameplay suite contains route, destination, runway, helipad, finite-gate, la
 | `lib/` | Testable gameplay rules: landing geometry, route editing, missions, conflict detection, persistence, and PWA behavior |
 | `tests/game.test.ts` | Deterministic game-rule regression suite |
 | `public/` | PWA manifest, service worker, app icons, and static scenery |
-| `scripts/publish-pwa.sh` | Stable-URL PWA release script |
 
 ## Touch and landing design
 
 A player selects an aircraft and draws its route. The game preserves the player-authored line rather than replacing it with an invisible auto-route. Directional runways use finite approach gates: a route locks only when it crosses the correct coloured gate in the correct direction. Vertical destinations such as H1 use a small visible circular capture boundary, so a green capture point is always visually associated with the landing pad.
 
-## Publishing to the existing PWA URL
+## Publishing
 
-The source project deliberately publishes to the existing GitHub Pages repository, `arka5055/arka5055.github.io`, so it does not create a second PWA link.
-
-```bash
-pnpm publish:pwa
-```
-
-The command increments the service-worker cache identifier, validates TypeScript and game tests, exports the PWA, and pushes the generated assets to the `gh-pages` branch of the Pages repository. It requires an authenticated GitHub CLI session with permission to push to that repository.
+Publish from Grok so the live app stays at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/). Do not publish a second PWA to GitHub Pages.
 
 ## Contribution workflow
 
