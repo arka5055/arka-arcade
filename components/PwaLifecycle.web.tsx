@@ -1,5 +1,21 @@
 import { useEffect } from 'react';
 
+const CACHE_RESET_KEY = 'skyline-cache-reset-v1.3.0';
+
+async function purgeStaleClients() {
+  if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+  const alreadyReset = window.localStorage.getItem(CACHE_RESET_KEY) === '1';
+  if (!alreadyReset) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    window.localStorage.setItem(CACHE_RESET_KEY, '1');
+  }
+}
+
 /** Registers the offline app shell only in secure browser contexts. */
 export function PwaLifecycle() {
   useEffect(() => {
@@ -12,25 +28,28 @@ export function PwaLifecycle() {
     const watchInstallingWorker = (worker: ServiceWorker) => {
       worker.addEventListener('statechange', () => {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          worker.postMessage({ type: 'SKIP_WAITING' });
           announceUpdate();
         }
       });
     };
     const onControllerChange = () => {
-      if (!reloadingForUpdate) return;
-      window.location.reload();
+      if (reloadingForUpdate) window.location.reload();
     };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
+    purgeStaleClients()
+      .then(() => navigator.serviceWorker.register(`/service-worker.js?v=${CACHE_RESET_KEY}`, { updateViaCache: 'none' }))
       .then(async (registration) => {
         registrationRef = registration;
-        if (registration.waiting) announceUpdate();
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          announceUpdate();
+        }
         if (registration.installing) watchInstallingWorker(registration.installing);
         registration.addEventListener('updatefound', () => {
           if (registration.installing) watchInstallingWorker(registration.installing);
         });
-        // Check on every launch rather than waiting for the browser's periodic SW update check.
         await registration.update();
       })
       .catch(() => {
@@ -65,7 +84,6 @@ export function PwaLifecycle() {
     const readyWindow = window as typeof window & { __skylineInteractive?: boolean };
     if (readyWindow.__skylineInteractive) dismiss();
     window.addEventListener('skyline-interactive', dismiss, { once: true });
-    // Avoid a permanent overlay if the browser rejects canvas rendering for any reason.
     const safetyFallback = window.setTimeout(dismiss, 2200);
     return () => {
       window.removeEventListener('skyline-interactive', dismiss);

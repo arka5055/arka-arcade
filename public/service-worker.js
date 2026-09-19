@@ -1,4 +1,4 @@
-const CACHE = 'skyline-signal-1789842275978';
+const CACHE = 'skyline-signal-1789843500000';
 const APP_SHELL = [
   '/', '/manifest.json',
   '/scenery/airport.jpg', '/scenery/crosswind-coast.jpg', '/scenery/peak-rush-hour.jpg', '/scenery/superstorm-radar.jpg',
@@ -6,20 +6,27 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .then(() => caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
 
-// A running game chooses when a new release takes control. This avoids losing an
-// active approach because a background PWA update happens mid-session.
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))));
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -29,12 +36,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+    fetch(event.request).then((response) => {
       const copy = response.clone();
-      if (new URL(event.request.url).origin === self.location.origin) {
+      if (new URL(event.request.url).origin === self.location.origin && response.ok) {
         caches.open(CACHE).then((cache) => cache.put(event.request, copy));
       }
       return response;
-    }).catch(() => caches.match('/')))
+    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/'))),
   );
 });
