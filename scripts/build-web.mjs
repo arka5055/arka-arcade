@@ -142,29 +142,9 @@ self.addEventListener('fetch', (event) => {
 
 if (!existsSync(join(ARCADE, "index.html"))) throw new Error("arcade/index.html is missing");
 if (!existsSync(join(TRACKS, "index.html"))) throw new Error("thought-tracks/index.html is missing");
+if (!existsSync(join(ARCADE, "coffee", "index.html"))) throw new Error("arcade/coffee/index.html is missing");
+if (!existsSync(join(ARCADE, "coffee", "app.js"))) throw new Error("arcade/coffee/app.js is missing");
 
-function bundleCoffee() {
-  const entry = join(ARCADE, "coffee", "src", "main.tsx");
-  if (!existsSync(entry)) throw new Error("arcade/coffee/src/main.tsx is missing");
-  const result = spawnSync(
-    process.execPath,
-    [
-      join(ROOT, "node_modules", "esbuild", "bin", "esbuild"),
-      entry,
-      "--bundle",
-      `--outfile=${join(ARCADE, "coffee", "app.js")}`,
-      "--format=iife",
-      "--jsx=automatic",
-      "--platform=browser",
-      "--target=es2020",
-      "--minify",
-    ],
-    { cwd: ROOT, stdio: "inherit" },
-  );
-  if (result.status !== 0) throw new Error("Coffee Rush bundle failed");
-}
-
-bundleCoffee();
 ensureSkyline();
 rewriteSkylinePaths();
 writeSkylineWorker();
@@ -216,6 +196,7 @@ writeFileSync(
           continue: true,
         },
         { handle: "filesystem" },
+        { src: "/coffee(?:/.*)?", dest: "/coffee/index.html" },
         { src: "/tracks(?:/.*)?", dest: "/tracks/index.html" },
         { src: "/skyline(?:/.*)?", dest: "/skyline/index.html" },
         { src: "/(.*)", dest: "/index.html" },
@@ -232,9 +213,10 @@ writeFileSync(
     {
       outputDirectory: "dist-web",
       rewrites: [
+        { source: "/coffee/:path*", destination: "/coffee/:path*" },
         { source: "/tracks/:path*", destination: "/tracks/:path*" },
         { source: "/skyline/:path*", destination: "/skyline/:path*" },
-        { source: "/((?!tracks/|skyline/|__grok/).*)", destination: "/index.html" },
+        { source: "/((?!coffee/|tracks/|skyline/|__grok/).*)", destination: "/index.html" },
       ],
       headers: [
         {

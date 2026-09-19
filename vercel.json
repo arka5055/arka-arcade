@@ -2,6 +2,10 @@
   "outputDirectory": "dist-web",
   "rewrites": [
     {
+      "source": "/coffee/:path*",
+      "destination": "/coffee/:path*"
+    },
+    {
       "source": "/tracks/:path*",
       "destination": "/tracks/:path*"
     },
@@ -10,7 +14,7 @@
       "destination": "/skyline/:path*"
     },
     {
-      "source": "/((?!tracks/|skyline/|__grok/).*)",
+      "source": "/((?!coffee/|tracks/|skyline/|__grok/).*)",
       "destination": "/index.html"
     }
   ],
