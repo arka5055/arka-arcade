@@ -6,6 +6,10 @@
       "destination": "/coffee/:path*"
     },
     {
+      "source": "/infinite/:path*",
+      "destination": "/infinite/:path*"
+    },
+    {
       "source": "/tracks/:path*",
       "destination": "/tracks/:path*"
     },
@@ -14,7 +18,7 @@
       "destination": "/skyline/:path*"
     },
     {
-      "source": "/((?!coffee/|tracks/|skyline/|__grok/).*)",
+      "source": "/((?!coffee/|infinite/|tracks/|skyline/|__grok/).*)",
       "destination": "/index.html"
     }
   ],
