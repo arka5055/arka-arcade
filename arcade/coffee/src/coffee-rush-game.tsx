@@ -752,7 +752,7 @@ function CoffeeRushGame() {
               aria-label={`Add ${ingredient.label}`}
             >
               <span className="jar__glass">
-                <img src={`/art/icon-${ingredient.id}.jpg`} alt="" draggable={false} />
+                <img src={`/coffee/art/icon-${ingredient.id}.jpg`} alt="" draggable={false} />
               </span>
               <b>{ingredient.short}</b>
             </button>

@@ -192,7 +192,7 @@ button:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 3px
   border-radius: 2px 2px 7px 7px;
   background:
     linear-gradient(180deg, rgba(255, 249, 236, 0.2), rgba(255, 243, 214, 0.08)),
-    url("/art/chit.jpg") center / cover no-repeat;
+    url("/coffee/art/chit.jpg") center / cover no-repeat;
   color: #3d2a22;
   box-shadow: 0 5px 0 #5a2e28, 0 8px 14px rgba(20, 8, 6, 0.28);
   animation: ticketIn 180ms both cubic-bezier(0.23, 1, 0.32, 1);
@@ -358,7 +358,7 @@ button:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 3px
   padding: 8px 6px 10px;
   background:
     linear-gradient(180deg, #0e464c 0%, #0c3e44 72%, transparent 72%),
-    url("/art/shelf.jpg") center bottom / 100% 18px no-repeat,
+    url("/coffee/art/shelf.jpg") center bottom / 100% 18px no-repeat,
     #0c3e44;
   box-shadow: inset 0 -2px 0 rgba(255, 214, 160, 0.12);
 }
@@ -419,9 +419,9 @@ button:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 3px
   padding: 8px 6px 0;
   overflow: hidden;
   background:
-    url("/art/tray.jpg") center bottom / 100% calc(100% - 176px) no-repeat,
+    url("/coffee/art/tray.jpg") center bottom / 100% calc(100% - 176px) no-repeat,
     linear-gradient(180deg, rgba(12, 62, 68, 0.22), rgba(8, 40, 44, 0.08) 176px, transparent 176px),
-    url("/art/enamel.jpg") center top / 100% 176px no-repeat,
+    url("/coffee/art/enamel.jpg") center top / 100% 176px no-repeat,
     #3a2418;
 }
 .brew-col {
