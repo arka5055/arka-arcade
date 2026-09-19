@@ -6,7 +6,9 @@ The game uses a Canvas-based tactical board, player-drawn flight routes, finite 
 
 ## Live PWA
 
-The published game is available at [arka5055.github.io](https://arka5055.github.io/). Normal releases update that same URL, so existing Home Screen installations stay valid.
+Play the current build at [amber-brick-glow-nova.grok.me](https://amber-brick-glow-nova.grok.me/).
+
+The installable Home Screen PWA stays at [arka5055.github.io](https://arka5055.github.io/), so existing iPhone installations keep the same URL.
 
 ## Local development
 
