@@ -193,10 +193,6 @@ function IconMute() {
 }
 
 export function CoffeeRushApp() {
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js");
-  }, []);
   return (
     <div className="cafe-shell">
       <div className="phone-stage">

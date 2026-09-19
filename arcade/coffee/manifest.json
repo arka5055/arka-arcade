@@ -1,0 +1,26 @@
+{
+  "id": "/coffee/",
+  "name": "Coffee Rush",
+  "short_name": "Coffee",
+  "start_url": "/coffee/",
+  "scope": "/coffee/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F5A5A",
+  "theme_color": "#0F5A5A",
+  "description": "A two-minute café shift. Match tickets, pour, and serve on green.",
+  "icons": [
+    {
+      "src": "/coffee/icons/coffee-rush-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/coffee/icons/coffee-rush-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
