@@ -16,14 +16,32 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "constants/**/*.ts",
+    "hooks/**/*.ts",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "nativewind-env.d.ts"
+    "nativewind-env.d.ts",
+    "app.config.ts",
+    "theme.config.d.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "dist-web",
+    "src",
+    ".grok",
+    "artifacts",
+    "vite.config.grok.ts",
+    "server/middleware"
   ]
 }

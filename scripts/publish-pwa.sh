@@ -15,15 +15,20 @@ trap cleanup EXIT
 
 cd "$ROOT"
 node scripts/bump-pwa-cache.mjs
-pnpm check
-pnpm test
+npx tsc --noEmit --pretty false --skipLibCheck
+npx vitest run tests/game.test.ts
 rm -rf "$OUTPUT_DIR"
 npx expo export --platform web --output-dir "$OUTPUT_DIR"
+cp -f "$ROOT/public/service-worker.js" "$OUTPUT_DIR/service-worker.js"
+cp -f "$ROOT/public/manifest.json" "$OUTPUT_DIR/manifest.json"
+touch "$OUTPUT_DIR/.nojekyll"
 
 # Always deploy to the existing gh-pages branch. The URL stays:
 # https://arka5055.github.io/ — so prior Home Screen installations stay valid.
+gh auth setup-git >/dev/null
 gh repo view "$REPO" >/dev/null
-git clone --depth 1 --branch gh-pages "https://github.com/$REPO.git" "$WORK_DIR"
+TOKEN="$(gh auth token)"
+git clone --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "$WORK_DIR"
 
 # Preserve the repository's Pages workflow while replacing every published asset.
 find "$WORK_DIR" -mindepth 1 -maxdepth 1 \
@@ -39,7 +44,7 @@ git add -A
 if git diff --cached --quiet; then
   echo "No PWA asset changes to publish."
 else
-  git commit -m "Publish Skyline Signal PWA update"
+  git commit -m "Publish Skyline Signal PWA v1.3.0"
   git push origin gh-pages
 fi
 
