@@ -1,6 +1,6 @@
 .arcade-home {
   position: fixed;
-  top: max(8px, env(safe-area-inset-top));
+  top: max(58px, calc(env(safe-area-inset-top) + 48px));
   left: max(8px, env(safe-area-inset-left));
   z-index: 100;
   display: inline-grid;

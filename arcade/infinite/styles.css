@@ -39,7 +39,7 @@ button { cursor: pointer; }
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   padding:
-    calc(12px + env(safe-area-inset-top))
+    max(58px, calc(env(safe-area-inset-top) + 48px))
     16px
     calc(18px + env(safe-area-inset-bottom));
   gap: 8px;

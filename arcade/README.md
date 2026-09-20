@@ -21,6 +21,7 @@ Same producer, same craft. Every game should:
 - Show the **ARKA** kicker on its title screen
 - Keep **ALL GAMES** on screen (`/arcade-home.css`, href `/`)
 - Let the player restart without reloading the site
+- Open straight into play — no extra PLAY gate after the launcher
 - Be portrait, 44px taps, iPhone-first
 - Never register a service worker at `/`
 

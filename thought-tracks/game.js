@@ -316,7 +316,7 @@ function startLevel(level) {
     nextId: 1,
     tapQueue: null,
   });
-  ui.title.classList.add('hidden');
+  ui.title?.classList.add('hidden');
   ui.pause.classList.add('hidden');
   ui.done.classList.add('hidden');
   refreshHud();
@@ -719,7 +719,6 @@ function restartGame(ev) {
   startGame();
 }
 
-document.getElementById('btn-play').addEventListener('click', () => { unlockAudio(); startGame(); });
 document.getElementById('btn-again').addEventListener('click', () => {
   unlockAudio();
   ui.done.classList.add('hidden');
@@ -757,6 +756,7 @@ addEventListener('visibilitychange', () => {
 resize();
 refreshHud();
 document.getElementById('btn-mute').textContent = muted ? '×' : '♪';
+startGame();
 requestAnimationFrame(loop);
 window.__qa = { startLevel, state, buildStage, validateStage };
 if ('serviceWorker' in navigator) {
