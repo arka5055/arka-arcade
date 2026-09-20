@@ -150,9 +150,12 @@ function render() {
     cell.disabled = Boolean(state.winner || mark != null || locked);
     cell.replaceChildren();
     if (mark) {
-      const glyph = document.createElement("span");
-      glyph.className = `mark mark-${mark.toLowerCase()}`;
-      cell.append(glyph);
+      const img = document.createElement("img");
+      img.className = "mark";
+      img.src = `/infinite/art/${mark.toLowerCase()}.png`;
+      img.alt = mark;
+      img.draggable = false;
+      cell.append(img);
     }
   }
   if (state.winner) {
