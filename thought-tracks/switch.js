@@ -74,20 +74,43 @@ export function liveOutPort(sw) {
   return sw.arm ? sw.out1 : sw.out0;
 }
 
-export function bladePts(sw) {
-  const t = Math.min(1, sw.anim ?? 1);
-  const from = sw.prevArm ? sw.out1 : sw.out0;
-  const to = liveOutPort(sw);
-  let angOut = PORT_ANG[to];
-  if (t < 1 && from !== to) {
-    const a0 = PORT_ANG[from];
-    const a1 = PORT_ANG[to];
-    let d = a1 - a0;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    angOut = a0 + d * t;
+function resamplePoly(pts, n) {
+  if (!pts || pts.length < 2) return pts;
+  let total = 0;
+  const seg = [];
+  for (let i = 1; i < pts.length; i++) {
+    const d = hypot(pts[i - 1], pts[i]);
+    seg.push(d);
+    total += d;
   }
-  return hubCurveFromAngles(sw, PORT_ANG[sw.inPort], angOut);
+  if (total < 0.001) return Array.from({ length: n }, () => ({ ...pts[0] }));
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let left = (total * i) / (n - 1);
+    let k = 0;
+    while (k < seg.length - 1 && left > seg[k]) { left -= seg[k]; k += 1; }
+    const d = seg[k] || 1;
+    const t = left / d;
+    const a = pts[k];
+    const b = pts[k + 1];
+    out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  }
+  return out;
+}
+
+export function bladePts(sw) {
+  const legal = new Set([sw.out0, sw.out1]);
+  const dst = legal.has(liveOutPort(sw)) ? liveOutPort(sw) : sw.out0;
+  const srcRaw = sw.prevArm ? sw.out1 : sw.out0;
+  const src = legal.has(srcRaw) ? srcRaw : sw.out0;
+  const b = hubCenterline(sw, sw.inPort, dst);
+  const t = Math.min(1, sw.anim ?? 1);
+  if (t >= 1 || src === dst) return b;
+  const a = hubCenterline(sw, sw.inPort, src);
+  const n = Math.max(a.length, b.length, 14);
+  const A = resamplePoly(a, n);
+  const B = resamplePoly(b, n);
+  return A.map((p, i) => ({ x: p.x + (B[i].x - p.x) * t, y: p.y + (B[i].y - p.y) * t }));
 }
 
 export function clipOutsideHubs(ctx, switches, x, y, w, h) {

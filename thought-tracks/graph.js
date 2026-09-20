@@ -1,4 +1,4 @@
-import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=21';
+import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=23';
 
 export const W = 390;
 export const H = 844;
@@ -166,7 +166,7 @@ function routePorts(a, aPort, b, bPort) {
   if ((aPort === 'N' && bPort === 'S' || aPort === 'S' && bPort === 'N') && Math.abs(p0.x - p1.x) < 6) {
     return [{ ...p0 }, { x: p0.x, y: p1.y }];
   }
-  const stub = 12;
+  const stub = 28;
   const a1 = { x: p0.x + DIR[aPort][0] * stub, y: p0.y + DIR[aPort][1] * stub };
   const b1 = { x: p1.x + DIR[bPort][0] * stub, y: p1.y + DIR[bPort][1] * stub };
   const pts = [{ ...p0 }, a1];
@@ -226,7 +226,7 @@ function atPct(region, px, py) {
   };
 }
 function stationOnFarEdge(region, inDir, color) {
-  const pad = 22;
+  const pad = 40;
   let x, y;
   if (inDir === 'N') { x = (region.x0 + region.x1) / 2; y = region.y1 - pad; }
   else if (inDir === 'S') { x = (region.x0 + region.x1) / 2; y = region.y0 + pad; }
@@ -258,17 +258,23 @@ function angNorm(a) {
 }
 function facingPort(from, to, banned = []) {
   const ang = Math.atan2(to.y - from.y, to.x - from.x);
-  const names = ['N', 'E', 'S', 'W', 'NE', 'SE', 'SW', 'NW'];
-  const prefer = names.filter((n) => !banned.includes(n));
-  const cardinal = prefer.filter((n) => n.length === 1);
-  const pool = cardinal.length ? cardinal : prefer;
-  let best = pool[0] || 'E';
+  let best = 'E';
   let bestD = 99;
-  for (const name of pool) {
+  for (const name of Object.keys(PORT_ANG)) {
+    if (banned.includes(name)) continue;
     const d = Math.abs(angNorm(PORT_ANG[name] - ang));
     if (d < bestD) { bestD = d; best = name; }
   }
   return best;
+}
+function pullStation(st, sw, port) {
+  const dir = DIR[port] || DIR.E;
+  const min = 108;
+  st.x = sw.x + dir[0] * min;
+  st.y = sw.y + dir[1] * min;
+  st.port = opposite(port);
+  st.x = Math.max(28, Math.min(W - 28, st.x));
+  st.y = Math.max(140, Math.min(H - 100, st.y));
 }
 function childInPort(child, parent) {
   if (child.kind === 'switch') {
@@ -302,6 +308,8 @@ function layoutPrefix(prefix, region, inDir, nodes, edges, codes, parent = null)
   sw.out0 = facingPort(sw, c0, [sw.inPort]);
   sw.out1 = facingPort(sw, c1, [sw.inPort, sw.out0]);
   sw.switchStates = { 0: { in: sw.inPort, out: sw.out0 }, 1: { in: sw.inPort, out: sw.out1 } };
+  if (c0.kind === 'station') pullStation(c0, sw, sw.out0);
+  if (c1.kind === 'station') pullStation(c1, sw, sw.out1);
   addEdge(edges, sw, sw.out0, c0, childInPort(c0, sw));
   addEdge(edges, sw, sw.out1, c1, childInPort(c1, sw));
   return sw;
@@ -396,8 +404,21 @@ export function buildStage(level, rung = 0) {
   addEdge(edges, src, src.port, root, root.inPort);
   const graph = { nodes, edges, sources: [src], merges: [], codes: spec.codes, spec, root };
   separateHubs(graph);
+  syncSwitchPorts(graph);
   graph.longest = longestRouteLen(graph);
   return graph;
+}
+
+function syncSwitchPorts(graph) {
+  for (const n of Object.values(graph.nodes)) {
+    if (n.kind !== 'switch') continue;
+    const ins = graph.edges.filter((e) => e.to.nodeId === n.id);
+    const outs = graph.edges.filter((e) => e.from.nodeId === n.id);
+    if (ins[0]) n.inPort = ins[0].to.port;
+    if (outs[0]) n.out0 = outs[0].from.port;
+    if (outs[1]) n.out1 = outs[1].from.port;
+    n.switchStates = { 0: { in: n.inPort, out: n.out0 }, 1: { in: n.inPort, out: n.out1 } };
+  }
 }
 
 function separateHubs(graph) {

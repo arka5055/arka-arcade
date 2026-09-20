@@ -4,13 +4,13 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=22';
+} from './graph.js?v=23';
 import {
   HIT_R, HUB_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=21';
-import { thumbnail, stageMeta } from './stages.js?v=13';
+} from './switch.js?v=23';
+import { thumbnail, stageMeta } from './stages.js?v=14';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
