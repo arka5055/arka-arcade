@@ -810,7 +810,9 @@ function CoffeeRushGame() {
       </section>
 
       <footer className="brew-foot">
-        <span>COFFEE RUSH</span>
+        <a className="arcade-home arcade-home--inline" href="/">
+          ALL GAMES
+        </a>
         <span>BUILD {GAME_SPEC.version}</span>
         <span>
           STAGE {stage.id} · {quota} DRINKS{best > 0 ? ` · BEST ${best}` : ""}

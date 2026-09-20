@@ -252,8 +252,5 @@ document.getElementById("btn-new").addEventListener("click", () => {
   state = emptyState();
   render();
 });
-document.getElementById("btn-home").addEventListener("click", () => {
-  window.location.assign("/");
-});
 
 render();

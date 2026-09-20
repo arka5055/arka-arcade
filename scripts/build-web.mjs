@@ -140,6 +140,24 @@ self.addEventListener('fetch', (event) => {
   }
 }
 
+function injectArcadeHome(dir) {
+  const snippet = `<link rel="stylesheet" href="/arcade-home.css"><a class="arcade-home arcade-home--foot" href="/">ALL GAMES</a>`;
+  function walk(folder) {
+    for (const name of readdirSync(folder, { withFileTypes: true })) {
+      const full = join(folder, name.name);
+      if (name.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!name.name.endsWith(".html")) continue;
+      let html = readFileSync(full, "utf8");
+      if (html.includes('class="arcade-home"')) continue;
+      const next = html.replace(/<body([^>]*)>/i, `<body$1>${snippet}`);
+      if (next !== html) writeFileSync(full, next);
+    }
+  }
+  walk(dir);
+}
 if (!existsSync(join(ARCADE, "index.html"))) throw new Error("arcade/index.html is missing");
 if (!existsSync(join(TRACKS, "index.html"))) throw new Error("thought-tracks/index.html is missing");
 if (!existsSync(join(ARCADE, "coffee", "index.html"))) throw new Error("arcade/coffee/index.html is missing");
@@ -148,6 +166,7 @@ if (!existsSync(join(ARCADE, "coffee", "app.js"))) throw new Error("arcade/coffe
 ensureSkyline();
 rewriteSkylinePaths();
 writeSkylineWorker();
+injectArcadeHome(SKYLINE);
 
 function assemble(dest) {
   copyDir(ARCADE, dest);

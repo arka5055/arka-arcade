@@ -37,7 +37,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(10px + env(safe-area-inset-top)) 10px 0;
+  padding: calc(10px + env(safe-area-inset-top)) 10px 0 118px;
   pointer-events: none;
 }
 

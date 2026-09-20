@@ -46,9 +46,10 @@ button { cursor: pointer; }
 
 .hud {
   display: grid;
-  grid-template-columns: 48px 1fr 48px;
+  grid-template-columns: 1fr 48px;
   align-items: center;
   gap: 10px;
+  padding-left: 110px;
 }
 
 .icon {
@@ -151,7 +152,9 @@ button { cursor: pointer; }
   place-items: end center;
   padding: 18px 18px calc(22px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(11, 16, 20, 0.2), rgba(11, 16, 20, 0.88) 46%, #0b1014);
+  pointer-events: none;
 }
+.overlay .card { pointer-events: auto; }
 .overlay.hidden { display: none; }
 
 .card {

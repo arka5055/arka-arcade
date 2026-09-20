@@ -913,9 +913,16 @@ button:focus-visible { outline: 3px solid var(--color-gold); outline-offset: 3px
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  min-height: 28px;
+  min-height: 44px;
   pointer-events: none;
   color: rgba(255, 229, 191, 0.9);
+}
+.brew-foot .arcade-home--inline {
+  position: static;
+  min-height: 44px;
+  padding: 0 10px;
+  pointer-events: auto;
+  background: #0b1014;
 }
 
 .brew-modal {

@@ -1,0 +1,23 @@
+.arcade-home {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 100;
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(242, 239, 230, 0.18);
+  border-radius: 12px;
+  background: #0b1014;
+  color: #f2efe6;
+  font: 700 11px/1 "Segoe UI", system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.arcade-home--foot {
+  top: auto;
+  bottom: max(10px, env(safe-area-inset-bottom));
+}
