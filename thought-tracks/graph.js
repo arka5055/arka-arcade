@@ -145,16 +145,27 @@ export function along(pts, dist) {
   return { x: last.x, y: last.y, ang: Math.atan2(last.y - prev.y, last.x - prev.x) };
 }
 function routePorts(a, aPort, b, bPort) {
-  const p0 = portPoint(a, aPort), p1 = portPoint(b, bPort);
-  const dist = hypot(p0, p1);
-  const stub = Math.min(14, Math.max(6, dist * 0.16));
+  const p0 = portPoint(a, aPort);
+  const p1 = portPoint(b, bPort);
+  if ((aPort === 'E' && bPort === 'W' || aPort === 'W' && bPort === 'E') && Math.abs(p0.y - p1.y) < 6) {
+    return [{ ...p0 }, { x: p1.x, y: p0.y }];
+  }
+  if ((aPort === 'N' && bPort === 'S' || aPort === 'S' && bPort === 'N') && Math.abs(p0.x - p1.x) < 6) {
+    return [{ ...p0 }, { x: p0.x, y: p1.y }];
+  }
+  const stub = 12;
   const a1 = { x: p0.x + DIR[aPort][0] * stub, y: p0.y + DIR[aPort][1] * stub };
   const b1 = { x: p1.x + DIR[bPort][0] * stub, y: p1.y + DIR[bPort][1] * stub };
   const pts = [{ ...p0 }, a1];
-  if (aPort === 'E' || aPort === 'W') pts.push({ x: a1.x, y: b1.y });
-  else pts.push({ x: b1.x, y: a1.y });
-  pts.push(b1, { ...p1 });
-  return densify(pts, Math.min(12, stub));
+  if (aPort === 'E' || aPort === 'W') {
+    pts.push({ x: a1.x, y: b1.y });
+    pts.push(b1);
+  } else {
+    pts.push({ x: b1.x, y: a1.y });
+    pts.push(b1);
+  }
+  pts.push({ ...p1 });
+  return densify(simplify(pts), 16);
 }
 function addEdge(edges, a, aPort, b, bPort) {
   const id = `${a.id}->${b.id}:${aPort}`;
@@ -225,6 +236,24 @@ function mkSw(id, prefix, x, y, inPort, out0, out1) {
     inPort, out0, out1, switchStates: { 0: { in: inPort, out: out0 }, 1: { in: inPort, out: out1 } },
   };
 }
+function layoutTwo(nodes, edges, tokens, region) {
+  const [pink, black] = tokens;
+  const j = mkSw('J:', '', 118, 430, 'W', 'E', 'S');
+  const stP = {
+    id: `ST:${pink}`, kind: 'station', color: pink,
+    x: j.x + 52, y: region.y0 + 56, port: 'S', pulse: 0, ports: {},
+  };
+  const stK = {
+    id: `ST:${black}`, kind: 'station', color: black,
+    x: region.x1 - 32, y: region.y1 - 80, port: 'N', pulse: 0, ports: {},
+  };
+  nodes[j.id] = j;
+  nodes[stP.id] = stP;
+  nodes[stK.id] = stK;
+  addEdge(edges, j, 'E', stP, 'S');
+  addEdge(edges, j, 'S', stK, 'N');
+  return j;
+}
 function layoutThree(nodes, edges, tokens, region) {
   const [a, b, c] = tokens;
   const j1 = mkSw('J:', '', region.x0 + 36, (region.y0 + region.y1) / 2, 'W', 'N', 'S');
@@ -245,13 +274,17 @@ export function buildStage(level, rung = 0) {
   const spec = stageFor(level, rung);
   const nodes = {}, edges = [];
   const region = playRegion();
-  const root = spec.n === 3
-    ? layoutThree(nodes, edges, spec.tokens, region)
-    : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
+  const root = spec.n === 2
+    ? layoutTwo(nodes, edges, spec.tokens, region)
+    : spec.n === 3
+      ? layoutThree(nodes, edges, spec.tokens, region)
+      : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
-    x: root.x - DIR[root.inPort][0] * 56, y: root.y - DIR[root.inPort][1] * 56,
-    port: root.inPort, ports: {},
+    x: root.x + DIR[root.inPort][0] * 58,
+    y: root.y + DIR[root.inPort][1] * 58,
+    port: opposite(root.inPort),
+    ports: {},
   };
   src.x = Math.max(18, Math.min(W - 18, src.x));
   src.y = Math.max(110, Math.min(H - 110, src.y));

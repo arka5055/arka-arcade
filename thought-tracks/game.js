@@ -3,7 +3,7 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS,
-} from './graph.js';
+} from './graph.js?v=5';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -442,27 +442,35 @@ function strokeRail(pts, live) {
 
 function drawInner(sw) {
   const t = Math.min(1, sw.anim ?? 1);
-  const pIn = portPoint(sw, sw.inPort);
   const a0 = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.out0];
   const a1 = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.out1];
+  const ain = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.inPort];
   const fromA = sw.arm ? a1 : a0;
   const prevA = sw.prevArm ? a1 : a0;
   let d = fromA - prevA;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   const a = prevA + d * t;
-  const x1 = sw.x + Math.cos(a) * HUB_R;
-  const y1 = sw.y + Math.sin(a) * HUB_R;
+  const x0 = sw.x + Math.cos(ain) * (HUB_R - 1);
+  const y0 = sw.y + Math.sin(ain) * (HUB_R - 1);
+  const x1 = sw.x + Math.cos(a) * (HUB_R - 1);
+  const y1 = sw.y + Math.sin(a) * (HUB_R - 1);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(sw.x, sw.y, HUB_R - 0.5, 0, Math.PI * 2);
+  ctx.clip();
   ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
   ctx.strokeStyle = '#e7ead8';
   ctx.lineWidth = 10;
   ctx.beginPath();
-  ctx.moveTo(pIn.x, pIn.y);
+  ctx.moveTo(x0, y0);
   ctx.quadraticCurveTo(sw.x, sw.y, x1, y1);
   ctx.stroke();
   ctx.strokeStyle = '#2a3424';
   ctx.lineWidth = 3.4;
   ctx.stroke();
+  ctx.restore();
 }
 
 function drawStation(st) {
@@ -637,11 +645,7 @@ function render() {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
-  for (const e of g.edges) {
-    const from = g.nodes[e.from.nodeId];
-    const live = from.kind !== 'switch' || liveEdge(from, e);
-    strokeRail(e.pts, live);
-  }
+  for (const e of g.edges) strokeRail(e.pts, true);
   for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawInner(n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);
   for (const s of g.sources) drawSource(s);
