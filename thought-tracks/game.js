@@ -546,7 +546,13 @@ function renderStages() {
     view.width = shot.width;
     view.height = shot.height;
     view.getContext('2d').drawImage(shot, 0, 0);
-    card.append(view);
+    const shotWrap = document.createElement('div');
+    shotWrap.className = 'shot';
+    const num = document.createElement('span');
+    num.className = 'stage-num';
+    num.textContent = String(level);
+    shotWrap.append(view, num);
+    card.append(shotWrap);
     if (done) {
       const clearedTag = document.createElement('span');
       clearedTag.className = 'tag cleared-tag';
@@ -560,7 +566,7 @@ function renderStages() {
       card.append(tag);
     }
     const title = document.createElement('b');
-    title.textContent = `LEVEL ${level}`;
+    title.textContent = `STAGE ${level}`;
     card.append(title);
     if (done) {
       const status = document.createElement('span');

@@ -230,6 +230,9 @@ a.home-link {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+.stage-card .shot {
+  position: relative;
+}
 .stage-card canvas {
   display: block;
   width: 100%;
@@ -237,6 +240,24 @@ a.home-link {
   aspect-ratio: 4 / 3;
   border-radius: 10px;
   background: #3a5f3c;
+}
+.stage-card .stage-num {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #142214;
+  color: #eef3e4;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 #0d160c;
+  pointer-events: none;
 }
 .stage-card b {
   display: block;
