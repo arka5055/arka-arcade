@@ -1,3 +1,4 @@
+import { onLeaveApp, resumeAudio } from '/leave-pause.js';
 import {
   W, H, HUB_R, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
@@ -797,11 +798,10 @@ function pauseForLeave() {
   state.mode = 'pause';
   ui.pause.classList.remove('hidden');
 }
+onLeaveApp(pauseForLeave);
 addEventListener('visibilitychange', () => {
-  if (document.hidden) pauseForLeave();
-  if (!document.hidden && audioCtx?.state === 'suspended') audioCtx.resume();
+  if (!document.hidden) resumeAudio(audioCtx);
 });
-addEventListener('pagehide', pauseForLeave);
 
 resize();
 refreshHud();

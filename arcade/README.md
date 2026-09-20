@@ -2,6 +2,8 @@
 
 One studio. One launcher. Every game in this repo.
 
+Agents: open **`.grok/skills/arka-arcade/SKILL.md`** before adding or polishing a game.
+
 Add a game by editing **one file**, then dropping a folder.
 
 ## Add a game
@@ -22,6 +24,7 @@ Same producer, same craft. Every game should:
 - Keep **ALL GAMES** on screen (`/arcade-home.css`, href `/`)
 - Let the player restart without reloading the site
 - Open straight into play — no extra PLAY gate after the launcher
+- **Pause on leave** — `visibilitychange` + `pagehide` via [`leave-pause.js`](leave-pause.js). Realtime games show Resume. Do not use `window.blur`.
 - Be portrait, 44px taps, iPhone-first
 - Never register a service worker at `/`
 
@@ -34,5 +37,6 @@ Art can differ. The chrome cannot.
 | `games.json` | Catalog |
 | `brand.css` | Shared type and ARKA stamp |
 | `arcade-home.css` | ALL GAMES chip |
+| `leave-pause.js` | iPhone app-switch pause |
 | `launcher.js` | Renders the picker from the catalog |
 | `scripts/arcade-catalog.mjs` | Server + publish read this |

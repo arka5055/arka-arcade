@@ -1,3 +1,5 @@
+import { onLeaveApp } from "/leave-pause.js";
+
 const LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -298,6 +300,10 @@ for (let i = 0; i < 9; i += 1) {
 
 document.getElementById("btn-again").addEventListener("click", start);
 document.getElementById("btn-new").addEventListener("click", start);
+
+onLeaveApp(() => {
+  /* Turn-based: maybeCpu already waits while document.hidden. */
+});
 
 start();
 }
