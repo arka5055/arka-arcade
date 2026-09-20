@@ -1,0 +1,47 @@
+{
+  "studio": "ARKA",
+  "product": "Arcade",
+  "tagline": "Every game here is from the same studio, to the same bar: iPhone-first, tactile, and finished.",
+  "games": [
+    {
+      "id": "coffee",
+      "title": "Coffee Rush",
+      "kind": "Barista shift",
+      "blurb": "Match tickets, pour, and serve on green before the clock runs out.",
+      "path": "/coffee/",
+      "root": "arcade/coffee",
+      "cover": "/media/coffee.jpg",
+      "tone": "#083d42"
+    },
+    {
+      "id": "skyline",
+      "title": "Skyline Signal",
+      "kind": "Air traffic",
+      "blurb": "Draw a path from each plane to the matching strip. Keep the sky clear.",
+      "path": "/skyline/",
+      "root": "arcade/skyline",
+      "cover": "/media/skyline.jpg",
+      "tone": "#0a1822"
+    },
+    {
+      "id": "tracks",
+      "title": "Thought Tracks",
+      "kind": "Train routing",
+      "blurb": "Tap the green circles. Send every train to the house that matches it.",
+      "path": "/tracks/",
+      "root": "thought-tracks",
+      "cover": "/media/tracks.jpg",
+      "tone": "#182318"
+    },
+    {
+      "id": "infinite",
+      "title": "Infinite Tic Tac Toe",
+      "kind": "Vanishing marks",
+      "blurb": "Keep three marks. Your oldest vanishes on the fourth. Play vs CPU.",
+      "path": "/infinite/",
+      "root": "arcade/infinite",
+      "cover": "/media/infinite.jpg",
+      "tone": "#16131a"
+    }
+  ]
+}

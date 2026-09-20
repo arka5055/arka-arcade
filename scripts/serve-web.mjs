@@ -3,15 +3,13 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadCatalog } from "./arcade-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARCADE = path.join(ROOT, "arcade");
-const TRACKS = path.join(ROOT, "thought-tracks");
-const SKYLINE = path.join(ARCADE, "skyline");
-const COFFEE = path.join(ARCADE, "coffee");
-const INFINITE = path.join(ARCADE, "infinite");
 const GROK = path.join(ROOT, "public", "__grok");
 const PUBLIC = path.join(ROOT, "public");
+const catalog = loadCatalog(ROOT);
 const port = Number(process.env.PORT || 8080);
 
 const mime = {
@@ -51,17 +49,10 @@ function mapUrl(urlPath) {
   if (urlPath.startsWith("/__grok/")) {
     return { root: GROK, rel: urlPath.slice("/__grok/".length), spa: null };
   }
-  if (urlPath === "/tracks" || urlPath.startsWith("/tracks/")) {
-    return { root: TRACKS, rel: urlPath.slice("/tracks".length).replace(/^\/+/, ""), spa: "index.html" };
-  }
-  if (urlPath === "/skyline" || urlPath.startsWith("/skyline/")) {
-    return { root: SKYLINE, rel: urlPath.slice("/skyline".length).replace(/^\/+/, ""), spa: "index.html" };
-  }
-  if (urlPath === "/coffee" || urlPath.startsWith("/coffee/")) {
-    return { root: COFFEE, rel: urlPath.slice("/coffee".length).replace(/^\/+/, ""), spa: "index.html" };
-  }
-  if (urlPath === "/infinite" || urlPath.startsWith("/infinite/")) {
-    return { root: INFINITE, rel: urlPath.slice("/infinite".length).replace(/^\/+/, ""), spa: "index.html" };
+  for (const game of catalog.games) {
+    if (urlPath === game.prefix || urlPath.startsWith(`${game.prefix}/`)) {
+      return { root: game.abs, rel: urlPath.slice(game.prefix.length).replace(/^\/+/, ""), spa: "index.html" };
+    }
   }
   return { root: ARCADE, rel: urlPath.replace(/^\/+/, ""), spa: "index.html" };
 }
@@ -102,5 +93,6 @@ server.on("error", (err) => {
   process.exit(1);
 });
 server.listen({ port, host: "0.0.0.0", ipv6Only: false }, () => {
-  console.log(`[arcade] hub ${ARCADE} · coffee ${COFFEE} · infinite ${INFINITE} · tracks ${TRACKS} · skyline ${SKYLINE} on 0.0.0.0:${port}`);
+  const names = catalog.games.map((game) => game.id).join(" · ");
+  console.log(`[${catalog.studio}] ${catalog.product} ${names} on 0.0.0.0:${port}`);
 });

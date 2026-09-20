@@ -1,0 +1,37 @@
+# ARKA Arcade
+
+One studio. One launcher. Every game in this repo.
+
+Add a game by editing **one file**, then dropping a folder.
+
+## Add a game
+
+1. Put a portrait iPhone web game in `arcade/<id>/index.html`.
+2. Add a cover at `arcade/media/<id>.jpg`.
+3. Add an entry to [`games.json`](games.json).
+
+The launcher, local server, and publish routes all read `games.json`. You do not edit `index.html` cards or Vercel rewrites.
+
+If the game source lives outside `arcade/<id>/` (Thought Tracks does), set `"root"` to that folder. The build copies it to `/<id>/`.
+
+## House bar
+
+Same producer, same craft. Every game should:
+
+- Show the **ARKA** kicker on its title screen
+- Keep **ALL GAMES** on screen (`/arcade-home.css`, href `/`)
+- Let the player restart without reloading the site
+- Be portrait, 44px taps, iPhone-first
+- Never register a service worker at `/`
+
+Art can differ. The chrome cannot.
+
+## Files
+
+| File | Role |
+| --- | --- |
+| `games.json` | Catalog |
+| `brand.css` | Shared type and ARKA stamp |
+| `arcade-home.css` | ALL GAMES chip |
+| `launcher.js` | Renders the picker from the catalog |
+| `scripts/arcade-catalog.mjs` | Server + publish read this |

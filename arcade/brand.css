@@ -1,0 +1,32 @@
+:root {
+  --bg: #0b1014;
+  --elev: #141a20;
+  --fg: #f2efe6;
+  --muted: #9a9588;
+  --line: rgba(242, 239, 230, 0.12);
+  --play: #f2efe6;
+  --play-fg: #0b1014;
+  --radius: 28px;
+  --radius-sm: 12px;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arka-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted, #9a9588);
+}
+
+.arka-stamp {
+  margin: 22px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted, #9a9588);
+}

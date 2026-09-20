@@ -3,10 +3,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, read
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { assertCatalog, vercelFallbackRoutes, vercelRewrites } from "./arcade-catalog.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ARCADE = join(ROOT, "arcade");
-const TRACKS = join(ROOT, "thought-tracks");
 const SKYLINE = join(ARCADE, "skyline");
 const DIST_WEB = join(ROOT, "dist-web");
 const DIST = join(ROOT, "dist");
@@ -158,10 +158,8 @@ function injectArcadeHome(dir) {
   }
   walk(dir);
 }
+const catalog = assertCatalog(ROOT);
 if (!existsSync(join(ARCADE, "index.html"))) throw new Error("arcade/index.html is missing");
-if (!existsSync(join(TRACKS, "index.html"))) throw new Error("thought-tracks/index.html is missing");
-if (!existsSync(join(ARCADE, "coffee", "index.html"))) throw new Error("arcade/coffee/index.html is missing");
-if (!existsSync(join(ARCADE, "coffee", "app.js"))) throw new Error("arcade/coffee/app.js is missing");
 
 ensureSkyline();
 rewriteSkylinePaths();
@@ -170,8 +168,11 @@ injectArcadeHome(SKYLINE);
 
 function assemble(dest) {
   copyDir(ARCADE, dest);
-  copyInto(TRACKS, join(dest, "tracks"));
-  copyInto(SKYLINE, join(dest, "skyline"));
+  for (const game of catalog.games) {
+    const nested = join(dest, game.id);
+    if (game.root === `arcade/${game.id}` && game.id !== "skyline") continue;
+    copyInto(game.abs, nested);
+  }
   for (const name of ["og.jpg", "x-banner.jpg", "favicon.svg"]) {
     const from = join(ROOT, "public", name);
     if (existsSync(from)) cpSync(from, join(dest, name));
@@ -215,10 +216,7 @@ writeFileSync(
           continue: true,
         },
         { handle: "filesystem" },
-        { src: "/coffee(?:/.*)?", dest: "/coffee/index.html" },
-        { src: "/infinite(?:/.*)?", dest: "/infinite/index.html" },
-        { src: "/tracks(?:/.*)?", dest: "/tracks/index.html" },
-        { src: "/skyline(?:/.*)?", dest: "/skyline/index.html" },
+        ...vercelFallbackRoutes(catalog),
         { src: "/(.*)", dest: "/index.html" },
       ],
     },
@@ -232,13 +230,7 @@ writeFileSync(
   `${JSON.stringify(
     {
       outputDirectory: "dist-web",
-      rewrites: [
-        { source: "/coffee/:path*", destination: "/coffee/:path*" },
-        { source: "/infinite/:path*", destination: "/infinite/:path*" },
-        { source: "/tracks/:path*", destination: "/tracks/:path*" },
-        { source: "/skyline/:path*", destination: "/skyline/:path*" },
-        { source: "/((?!coffee/|infinite/|tracks/|skyline/|__grok/).*)", destination: "/index.html" },
-      ],
+      rewrites: vercelRewrites(catalog),
       headers: [
         {
           source: "/:path*service-worker.js",
@@ -251,4 +243,4 @@ writeFileSync(
   )}\n`,
 );
 
-console.log("[arcade] built hub + Thought Tracks + Skyline Signal");
+console.log(`[${catalog.studio}] built ${catalog.product} · ${catalog.games.map((game) => game.id).join(" · ")}`);

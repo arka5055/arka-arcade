@@ -6,19 +6,19 @@
       "destination": "/coffee/:path*"
     },
     {
-      "source": "/infinite/:path*",
-      "destination": "/infinite/:path*"
+      "source": "/skyline/:path*",
+      "destination": "/skyline/:path*"
     },
     {
       "source": "/tracks/:path*",
       "destination": "/tracks/:path*"
     },
     {
-      "source": "/skyline/:path*",
-      "destination": "/skyline/:path*"
+      "source": "/infinite/:path*",
+      "destination": "/infinite/:path*"
     },
     {
-      "source": "/((?!coffee/|infinite/|tracks/|skyline/|__grok/).*)",
+      "source": "/((?!coffee/|skyline/|tracks/|infinite/|__grok/).*)",
       "destination": "/index.html"
     }
   ],

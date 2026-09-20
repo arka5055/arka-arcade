@@ -1,4 +1,4 @@
-const CACHE = 'thought-tracks-v14';
+const CACHE = 'thought-tracks-v15';
 const PRECACHE = [
   './',
   './index.html',
