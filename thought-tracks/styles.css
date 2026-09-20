@@ -63,8 +63,8 @@ html, body {
 .chip.quiet span { font-size: 14px; font-weight: 700; opacity: 0.78; }
 .chip.stage { background: rgba(18, 32, 18, 0.78); flex: 0.62; }
 .chip.stage span { font-size: 18px; }
-.chip.goal { flex: 1.15; }
-.chip.goal span { font-size: 13px; letter-spacing: 0.02em; }
+.chip.goal { flex: 1.45; min-width: 78px; }
+.chip.goal span { font-size: 12px; letter-spacing: 0.01em; }
 
 .lives {
   font-size: 18px;

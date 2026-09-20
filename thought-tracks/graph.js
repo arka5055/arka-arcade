@@ -1,4 +1,4 @@
-import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry, trimRailToHubs } from './switch.js?v=25';
+import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry, trimRailToHubs } from './switch.js?v=26';
 
 export const W = 390;
 export const H = 844;
@@ -48,7 +48,7 @@ const LEVELS = [
   { id: 4, n: 4, shape: 'balanced', cap: 3, conc: 2.2, pool: 18, time: 64, miss: 3, pressure: 2, intro: 'Watch both sides of the board.' },
   { id: 5, n: 5, shape: 'mixed', cap: 3, conc: 2.6, pool: 22, time: 74, miss: 3, pressure: 2, intro: 'Prioritize the nearest switch, not the newest train.' },
   { id: 6, n: 6, shape: 'balanced', cap: 5, conc: 5.0, pool: 28, time: 84, miss: 3, pressure: 3, intro: 'Several trains may be on the rails at once.' },
-  { id: 7, n: 7, shape: 'three', cap: 4, conc: 3.5, pool: 34, time: 94, miss: 3, pressure: 3, intro: 'Scan the whole board. Downstream switches stay set.' },
+  { id: 7, n: 7, shape: 'three', cap: 6, conc: 4.2, pool: 34, time: 94, miss: 3, pressure: 3, intro: 'Scan the whole board. Downstream switches stay set.' },
   { id: 8, n: 8, shape: 'balanced', cap: 5, conc: 4.0, pool: 42, time: 104, miss: 3, pressure: 3, intro: 'NEW: Two-color trains must match two-color stations.' },
   { id: 9, n: 9, shape: 'mixed', cap: 5, conc: 4.4, pool: 48, time: 108, miss: 3, pressure: 3, intro: 'Two switches can need a tap at almost the same time.' },
   { id: 10, n: 10, shape: 'long', cap: 6, conc: 4.8, pool: 56, time: 114, miss: 3, pressure: 3, intro: 'The first switch may serve two trains in a row.' },
@@ -416,23 +416,23 @@ function layoutSix(nodes, edges, tokens, region) {
 function layoutSeven(nodes, edges, tokens, region) {
   const [pink, black, green, yellow, blue, violet, white] = tokens;
   const p = (x, y) => atPct(region, x, y);
-  const j1 = mkSw('J:', '', ...xy(p(22, 50)), 'W', 'NE', 'SE');
-  const j2 = mkSw('J:0', '0', ...xy(p(42, 22)), 'SW', 'N', 'E');
-  const j4 = mkSw('J:00', '00', ...xy(p(68, 10)), 'SW', 'N', 'E');
-  const j3 = mkSw('J:1', '1', ...xy(p(42, 60)), 'NW', 'E', 'SE');
-  const j5 = mkSw('J:11', '11', ...xy(p(66, 76)), 'NW', 'E', 'S');
-  const j6 = mkSw('J:111', '111', ...xy(p(66, 96)), 'N', 'W', 'E');
-  j1.sourceAt = p(6, 50);
+  const j1 = mkSw('J:', '', ...xy(p(46, 50)), 'W', 'NE', 'SE');
+  const j2 = mkSw('J:0', '0', ...xy(p(60, 28)), 'SW', 'N', 'E');
+  const j4 = mkSw('J:00', '00', ...xy(p(74, 16)), 'SW', 'N', 'E');
+  const j3 = mkSw('J:1', '1', ...xy(p(60, 64)), 'NW', 'E', 'SE');
+  const j5 = mkSw('J:11', '11', ...xy(p(76, 76)), 'NW', 'E', 'S');
+  const j6 = mkSw('J:111', '111', ...xy(p(76, 91)), 'N', 'W', 'E');
+  j1.sourceAt = p(5, 50);
   const st = (color, x, y, port) => ({
     id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
   });
-  const stP = st(pink, 68, 0, 'S');
-  const stK = st(black, 94, 12, 'W');
-  const stG = st(green, 94, 34, 'W');
-  const stY = st(yellow, 94, 54, 'W');
-  const stB = st(blue, 94, 76, 'W');
-  const stV = st(violet, 40, 96, 'E');
-  const stW = st(white, 94, 96, 'W');
+  const stP = st(pink, 74, 8, 'S');
+  const stK = st(black, 86, 18, 'W');
+  const stG = st(green, 86, 38, 'W');
+  const stY = st(yellow, 82, 56, 'W');
+  const stB = st(blue, 86, 74, 'W');
+  const stV = st(violet, 48, 90, 'E');
+  const stW = st(white, 86, 90, 'W');
   for (const n of [j1, j2, j3, j4, j5, j6, stP, stK, stG, stY, stB, stV, stW]) nodes[n.id] = n;
   addCurve(edges, j1, 'NE', j2, 'SW');
   addCurve(edges, j1, 'SE', j3, 'NW');

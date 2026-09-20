@@ -5,12 +5,12 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=27';
+} from './graph.js?v=28';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=25';
+} from './switch.js?v=26';
 import { thumbnail, stageMeta } from './stages.js?v=16';
 
 const canvas = document.getElementById('game');

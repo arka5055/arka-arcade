@@ -1,6 +1,6 @@
 /** Canonical turnout: one pivot, three ports, a blade that trains follow. */
 
-export const HUB_R = 19;
+export const HUB_R = 17;
 export const HIT_R = 48;
 export const COMMIT_PAD = 2;
 export const FILLET_R = 8.5;
@@ -243,7 +243,6 @@ export function drawBlade(ctx, sw) {
     sleepers: false,
     cap: 'round',
   });
-  drawPivot(ctx, sw);
 }
 
 export function drawPortsDebug(ctx, sw) {
