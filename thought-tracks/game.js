@@ -4,9 +4,9 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=9';
+} from './graph.js?v=22';
 import {
-  HIT_R,
+  HIT_R, HUB_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
 } from './switch.js?v=21';
@@ -922,7 +922,10 @@ function step(dt) {
     tr.steam = (tr.steam || 0) - dt;
     if (tr.steam <= 0) {
       const p = trainPos(tr);
-      puff(p.x + Math.cos(p.ang) * 8, p.y + Math.sin(p.ang) * 8 - 10, 'rgba(238,243,228,0.85)');
+      const nearHub = Object.values(state.graph.nodes).some((n) => n.kind === 'switch' && Math.hypot(p.x - n.x, p.y - n.y) < HUB_R + 18);
+      if (!nearHub) {
+        puff(p.x - Math.cos(p.ang) * 12, p.y - Math.sin(p.ang) * 12 - 3, 'rgba(238,243,228,0.8)');
+      }
       tr.steam = 0.2;
     }
   }

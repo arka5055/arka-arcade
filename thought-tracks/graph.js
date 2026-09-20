@@ -1,4 +1,4 @@
-import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=21';
+import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=21';
 
 export const W = 390;
 export const H = 844;
@@ -251,10 +251,38 @@ function splitForIncoming(inDir, region, sw, n0, n1) {
   const x1 = inDir === 'W' ? region.x1 : sw.x - 80;
   return { r0: { x0, y0: region.y0, x1, y1: mid - gap / 2 }, r1: { x0, y0: mid + gap / 2, x1, y1: region.y1 }, out0: 'N', out1: 'S' };
 }
-function layoutPrefix(prefix, region, inDir, nodes, edges, codes) {
+function angNorm(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+function facingPort(from, to, banned = []) {
+  const ang = Math.atan2(to.y - from.y, to.x - from.x);
+  const names = ['N', 'E', 'S', 'W', 'NE', 'SE', 'SW', 'NW'];
+  const prefer = names.filter((n) => !banned.includes(n));
+  const cardinal = prefer.filter((n) => n.length === 1);
+  const pool = cardinal.length ? cardinal : prefer;
+  let best = pool[0] || 'E';
+  let bestD = 99;
+  for (const name of pool) {
+    const d = Math.abs(angNorm(PORT_ANG[name] - ang));
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best;
+}
+function childInPort(child, parent) {
+  if (child.kind === 'switch') {
+    child.inPort = facingPort(child, parent, [child.out0, child.out1]);
+    return child.inPort;
+  }
+  child.port = facingPort(child, parent);
+  return child.port;
+}
+function layoutPrefix(prefix, region, inDir, nodes, edges, codes, parent = null) {
   const color = leafFor(codes, prefix);
   if (color) {
     const st = stationOnFarEdge(region, inDir, color);
+    if (parent) st.port = facingPort(st, parent);
     nodes[st.id] = st;
     return st;
   }
@@ -264,16 +292,18 @@ function layoutPrefix(prefix, region, inDir, nodes, edges, codes) {
   else if (inDir === 'S') sw.y = Math.max(sw.y, region.y1 - Math.max(70, (region.y1 - region.y0) * 0.38));
   else if (inDir === 'W') sw.x = Math.min(sw.x, region.x0 + Math.max(70, (region.x1 - region.x0) * 0.38));
   else sw.x = Math.max(sw.x, region.x1 - Math.max(70, (region.x1 - region.x0) * 0.38));
+  if (parent) sw.inPort = facingPort(sw, parent);
   nodes[sw.id] = sw;
   const n0 = leafCount(codes, `${prefix}0`);
   const n1 = leafCount(codes, `${prefix}1`);
-  const split = splitForIncoming(inDir, region, sw, n0, n1);
-  sw.out0 = split.out0; sw.out1 = split.out1;
-  sw.switchStates = { 0: { in: inDir, out: sw.out0 }, 1: { in: inDir, out: sw.out1 } };
-  const c0 = layoutPrefix(`${prefix}0`, split.r0, opposite(sw.out0), nodes, edges, codes);
-  const c1 = layoutPrefix(`${prefix}1`, split.r1, opposite(sw.out1), nodes, edges, codes);
-  addEdge(edges, sw, sw.out0, c0, c0.kind === 'switch' ? c0.inPort : c0.port);
-  addEdge(edges, sw, sw.out1, c1, c1.kind === 'switch' ? c1.inPort : c1.port);
+  const split = splitForIncoming(sw.inPort, region, sw, n0, n1);
+  const c0 = layoutPrefix(`${prefix}0`, split.r0, opposite(split.out0), nodes, edges, codes, sw);
+  const c1 = layoutPrefix(`${prefix}1`, split.r1, opposite(split.out1), nodes, edges, codes, sw);
+  sw.out0 = facingPort(sw, c0, [sw.inPort]);
+  sw.out1 = facingPort(sw, c1, [sw.inPort, sw.out0]);
+  sw.switchStates = { 0: { in: sw.inPort, out: sw.out0 }, 1: { in: sw.inPort, out: sw.out1 } };
+  addEdge(edges, sw, sw.out0, c0, childInPort(c0, sw));
+  addEdge(edges, sw, sw.out1, c1, childInPort(c1, sw));
   return sw;
 }
 function mkSw(id, prefix, x, y, inPort, out0, out1) {
@@ -365,8 +395,44 @@ export function buildStage(level, rung = 0) {
   nodes[src.id] = src;
   addEdge(edges, src, src.port, root, root.inPort);
   const graph = { nodes, edges, sources: [src], merges: [], codes: spec.codes, spec, root };
+  separateHubs(graph);
   graph.longest = longestRouteLen(graph);
   return graph;
+}
+
+function separateHubs(graph) {
+  const switches = Object.values(graph.nodes).filter((n) => n.kind === 'switch');
+  const minD = HUB_R * 2.7;
+  let any = false;
+  for (let iter = 0; iter < 10; iter++) {
+    let moved = false;
+    for (let i = 0; i < switches.length; i++) {
+      for (let j = i + 1; j < switches.length; j++) {
+        const a = switches[i];
+        const b = switches[j];
+        const d = hypot(a, b);
+        if (d >= minD || d < 0.2) continue;
+        const ux = (b.x - a.x) / d;
+        const uy = (b.y - a.y) / d;
+        const push = (minD - d) / 2;
+        a.x -= ux * push; a.y -= uy * push;
+        b.x += ux * push; b.y += uy * push;
+        a.x = Math.max(40, Math.min(W - 40, a.x));
+        a.y = Math.max(150, Math.min(H - 120, a.y));
+        b.x = Math.max(40, Math.min(W - 40, b.x));
+        b.y = Math.max(150, Math.min(H - 120, b.y));
+        moved = true;
+        any = true;
+      }
+    }
+    if (!moved) break;
+  }
+  if (!any) return;
+  for (const e of graph.edges) {
+    const a = graph.nodes[e.from.nodeId];
+    const b = graph.nodes[e.to.nodeId];
+    e.pts = routePorts(a, e.from.port, b, e.to.port);
+  }
 }
 
 export function longestRouteLen(graph) {

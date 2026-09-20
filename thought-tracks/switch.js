@@ -223,6 +223,8 @@ export function assertSwitchGeometry(sw, edges) {
   const b = hubCenterline(sw, sw.inPort, sw.out1);
   if (!near(a[0], switchPort(sw, sw.inPort))) errors.push(`${sw.id}: blade A misses incoming`);
   if (!near(a[a.length - 1], switchPort(sw, sw.out0))) errors.push(`${sw.id}: blade A misses out0`);
+  if (!near(b[0], switchPort(sw, sw.inPort))) errors.push(`${sw.id}: blade B misses incoming`);
   if (!near(b[b.length - 1], switchPort(sw, sw.out1))) errors.push(`${sw.id}: blade B misses out1`);
+  if (sw.inPort === sw.out0 || sw.inPort === sw.out1) errors.push(`${sw.id}: incoming equals an outgoing`);
   return errors;
 }
