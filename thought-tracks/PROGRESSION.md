@@ -12,7 +12,11 @@ Trains stay slow from Stage 1 through Stage 9. What grows is the tree, the numbe
 - A train locks its path when it commits to a switch. Later taps do not reroute that train.
 - Correct train: `100 × stage`. A miss never subtracts points.
 - Stages 1–2: reach a minimum correct count. Stages 3–9: **≤3 misses**.
-- The timer is the **release window**. At 0:00 no new trains launch. Trains already on the rails still finish. The result is routing accuracy, not finishing early.
+- A round ends early once the clear goal is mathematically impossible.
+  - Stage 1 fails on the 2nd miss.
+  - Stage 2 fails on the 3rd miss.
+  - Stages 3–9 fail on the 4th miss.
+- The listed train count is the **round workload**. All of those trains are scheduled. The timer paces launches; it does not delete remaining work. If the active-train cap blocks a launch, that train stays queued and leaves as soon as there is room. At 0:00 no *unscheduled* trains are created. Queued and active trains still resolve.
 
 ## Unlock vs clear
 
@@ -100,17 +104,21 @@ P is one tap. K and G need the root, then J2.
 Cap 3. Goal ≤3 misses.
 
 ```
-          P            G
-         /            /
-    J2 --        J3 --
-   /     \      /     \
-  /       K    /       Y
-J1 -----------
+             P          G
+            /          /
+          J2          J3
+         /  \        /  \
+        /    K      /    Y
+       /           /
+      J1-----------
 ```
 
-Stations: **P, K, G, Y**. Three switches.
+Binding routes:
 
-The root splits the board. Upper pair P/K. Lower pair G/Y. You have to watch both sides.
+- `J1.A → J2 → P / K`
+- `J1.B → J3 → G / Y`
+
+Three switches, four leaves. Stations: **P, K, G, Y**. The root splits the board. Upper pair P/K. Lower pair G/Y.
 
 *Watch both sides of the board.*
 
@@ -224,7 +232,9 @@ Stations: **P, K, G, Y, B, V, W, G/K**. Seven switches. Eight leaves.
 
 This is the first dual-color stage. The Stage 8 card shows a small **NEW · DUAL** chip. Stage 9 does not.
 
-A **G/K** train is split green/black and must reach the split **G/K** station. Color pair first; letters for accessibility.
+A **G/K** train is a distinct identity. It matches **only** the G/K station. It does not match single-color G or K. Token order is canonical: `G/K` and `K/G` are not separate targets. The same rule applies to **P/W**.
+
+Color pair first; letters for accessibility.
 
 Same train speed as Stage 7. More trains, one new identity rule.
 
@@ -285,8 +295,18 @@ If a map is hard because the rails are unreadable, that is a layout bug, not int
 - 1 incoming port, 2 outgoing ports, 1 live blade.
 - Parent–child is one rail, growing away from the tunnel.
 - No hairpins, no false crossings, no fourth port.
+- Dual-color identity is exact. `G/K` matches only `G/K`. `P/W` matches only `P/W`.
 - Dual-color stations are split fills, not a label on one color.
 - Selector thumbnails draw unique graph edges only.
+
+## Scoring and failure
+
+- Score for a correct train: `100 × stage`.
+- Misses never subtract points.
+- Stage 1 fails as soon as 2 trains have missed.
+- Stage 2 fails as soon as 3 trains have missed.
+- Stages 3–9 fail on the 4th miss.
+- If the round is not failed early, it resolves after every scheduled train has finished.
 
 ## Selector
 

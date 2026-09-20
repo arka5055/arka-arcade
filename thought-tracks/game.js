@@ -4,8 +4,8 @@ import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
-  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine, goalShort, LAST_STAGE,
-} from './graph.js?v=35';
+  tokenParts, tokenLabel, tokensMatch, stageFor, L14_RUNGS, goalLine, goalShort, LAST_STAGE,
+} from './graph.js?v=36';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
@@ -308,7 +308,6 @@ function decisionPressure() {
 
 function canRelease(source) {
   const spec = state.spec;
-  if (state.remaining <= 0) return false;
   if (state.spawned >= state.quota) return false;
   if (state.trains.length >= spec.cap) return false;
   if (decisionPressure() >= spec.pressure) return false;
@@ -396,7 +395,7 @@ function toggleSwitchAt(p) {
 
 function finishTrain(tr, station) {
   const spec = state.spec;
-  const ok = station?.kind === 'station' && station.color === tr.color;
+  const ok = station?.kind === 'station' && tokensMatch(tr.color, station.color);
   const accent = PALETTE[tokenParts(ok ? station.color : tr.color)[0]] || '#eef3e4';
   const pts = 100 * Math.min(state.level, 14);
   state.trains = state.trains.filter((t) => t !== tr);
@@ -427,6 +426,7 @@ function finishTrain(tr, station) {
     chime(false);
   }
   refreshHud();
+  if (roundLost()) endRound(false);
 }
 
 function advanceTrain(tr, dt) {
@@ -483,8 +483,13 @@ function spawnGap() {
 
 function roundPassed() {
   const spec = state.spec;
+  if (roundLost()) return false;
   if (spec.need) return state.home >= spec.need;
   return state.missed <= spec.miss;
+}
+
+function roundLost() {
+  return state.missed > (state.spec.miss || 0);
 }
 
 function failWhy() {
@@ -984,8 +989,7 @@ function step(dt) {
     }
   }
 
-  const spec = state.spec;
-  const doneSpawning = state.remaining <= 0 || state.spawned >= state.quota;
+  const doneSpawning = state.spawned >= state.quota;
   const idle = doneSpawning && state.trains.length === 0;
   if (idle) {
     endRound(roundPassed());
@@ -994,8 +998,8 @@ function step(dt) {
   if (!doneSpawning) {
     state.spawnIn -= dt;
     if (state.spawnIn <= 0) {
-      if (spawnTrain()) state.spawnIn = spawnGap();
-      else state.spawnIn = 0.18;
+      if (spawnTrain()) state.spawnIn = state.remaining > 0 ? spawnGap() : 0.12;
+      else state.spawnIn = 0.08;
     }
   }
   const ordered = [...state.trains].sort((a, b) => a.id - b.id);

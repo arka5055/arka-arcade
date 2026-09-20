@@ -20,6 +20,9 @@ export function tokenLabel(token) {
   const p = tokenParts(token);
   return p.length === 1 ? p[0] : `${p[0]}/${p[1]}`;
 }
+export function tokensMatch(train, station) {
+  return train === station;
+}
 export function goalLine(spec) {
   if (spec.need) return `${spec.need} of ${spec.total}`;
   return spec.miss === 1 ? '≤1 MISS' : `≤${spec.miss} MISSES`;
