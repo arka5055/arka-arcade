@@ -1,4 +1,4 @@
-import { summary, pullServer } from "/progress.js?v=3";
+import { summary, scoreBits, pullServer } from "/progress.js?v=4";
 
 const LAST_KEY = "arka-arcade-last";
 
@@ -59,14 +59,19 @@ function openGame(game, event) {
 }
 
 function card(game, resumeId) {
-  const line = scoreLine(game);
+  const bits = scoreBits(game.id);
   const img = el("img", { src: game.cover, alt: "", width: "800", height: "420" });
-  const shot = el("div", { class: "shot" }, [img]);
+  const chip = el("div", { class: bits.value ? "score-chip is-on" : "score-chip" }, [
+    el("span", { class: "score-label", text: bits.label }),
+    el("span", { class: "score-value", text: bits.display }),
+  ]);
+  const shot = el("div", { class: "shot" }, [img, chip]);
   const meta = [
     el("p", { class: "kind", text: game.kind }),
     el("h2", { text: game.title }),
-    el("p", { class: "best", text: line || "Best —" }),
   ];
+  if (bits.note) meta.push(el("p", { class: "best", text: bits.note }));
+  else meta.push(el("p", { class: "best", text: bits.value ? `${bits.label} ${bits.display}` : "Play" }));
   if (game.id === resumeId) meta.push(el("p", { class: "resume-tag", text: "Resume" }));
   const copy = el("div", { class: "copy" }, meta);
   const link = el("a", { class: `game ${game.id}`, href: game.path }, [shot, copy]);

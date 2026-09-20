@@ -235,26 +235,51 @@ export function saveInfinite(data) {
   write('arcade-infinite-v1', payload);
 }
 
-export function summary(id) {
+export function scoreBits(id) {
   if (id === 'tracks') {
     const t = loadTracks();
     const n = Object.keys(t.cleared).length;
-    return n ? `Cleared ${n}/16` : (t.best ? `Best ${t.best}` : '');
+    return {
+      label: 'Best',
+      value: t.best || 0,
+      display: t.best ? String(t.best) : '—',
+      note: n ? `${n}/16 cleared` : '',
+    };
   }
   if (id === 'coffee') {
     const c = loadCoffee();
-    if (c.best) return `Best ${c.best}${c.stage ? ` · Stage ${c.stage}` : ''}`;
-    return c.stage ? `Stage ${c.stage}` : '';
+    return {
+      label: 'Best',
+      value: c.best || 0,
+      display: c.best ? String(c.best) : '—',
+      note: c.stage ? `Stage ${c.stage}` : '',
+    };
   }
   if (id === 'skyline') {
     const s = loadSkyline();
-    if (s.sectors.length) return `Sectors ${s.sectors.length}${s.best ? ` · Best ${s.best}` : ''}`;
-    return s.best ? `Best ${s.best}` : '';
+    return {
+      label: 'Best',
+      value: s.best || 0,
+      display: s.best ? String(s.best) : '—',
+      note: s.sectors.length ? `${s.sectors.length} sector${s.sectors.length === 1 ? '' : 's'}` : '',
+    };
   }
   if (id === 'infinite') {
     const i = loadInfinite();
-    if (i.you || i.cpu) return `Record ${i.you}–${i.cpu}`;
-    return '';
+    const played = i.you || i.cpu;
+    return {
+      label: 'Record',
+      value: played ? 1 : 0,
+      display: played ? `${i.you}–${i.cpu}` : '—',
+      note: played ? 'vs CPU' : '',
+    };
   }
-  return '';
+  return { label: 'Best', value: 0, display: '—', note: '' };
+}
+
+export function summary(id) {
+  const bits = scoreBits(id);
+  if (!bits.value && !bits.note) return '';
+  if (bits.note) return `${bits.label} ${bits.display} · ${bits.note}`;
+  return `${bits.label} ${bits.display}`;
 }

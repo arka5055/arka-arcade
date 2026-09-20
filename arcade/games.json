@@ -1,7 +1,7 @@
 {
   "studio": "ARKA",
   "product": "Arcade",
-  "tagline": "Tap a game. Best scores stay here.",
+  "tagline": "Your best scores stay on each game.",
   "games": [
     {
       "id": "coffee",
