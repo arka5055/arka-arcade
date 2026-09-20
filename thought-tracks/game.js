@@ -1,17 +1,21 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
 import {
-  W, H, HUB_R, PALETTE,
+  W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS,
-} from './graph.js?v=8';
+} from './graph.js?v=9';
+import {
+  HUB_R, HIT_R, COMMIT_PAD,
+  strokeCenterline, drawHub, drawBlade, drawPortsDebug,
+  committedHub, liveOutPort,
+} from './switch.js?v=9';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const SAVE_KEY = 'thought-tracks-v14';
 const SPEED = 36;
 const TAP_COALESCE = 0.08;
-const HIT_R = 22;
 const DECISION_HORIZON = 2.5;
 
 const ui = {
@@ -155,16 +159,35 @@ function firstSwitchFor(source) {
 function shuffleBag(tokens, count) {
   const each = Math.floor(count / tokens.length);
   let extra = count - each * tokens.length;
-  const bag = [];
-  for (const t of tokens) {
-    for (let i = 0; i < each; i++) bag.push(t);
-    if (extra > 0) { bag.push(t); extra -= 1; }
+  const fair = () => {
+    const bag = [];
+    let rem = extra;
+    for (const t of tokens) {
+      for (let i = 0; i < each; i++) bag.push(t);
+      if (rem > 0) { bag.push(t); rem -= 1; }
+    }
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    return bag;
+  };
+  for (let n = 0; n < 80; n++) {
+    const bag = fair();
+    if (tokens.length === 2) {
+      if (bag[0] === bag[1]) continue;
+      let run = 1, bad = false;
+      for (let i = 1; i < bag.length; i++) {
+        run = bag[i] === bag[i - 1] ? run + 1 : 1;
+        if (run > 2) bad = true;
+      }
+      if (bad) continue;
+    }
+    return bag;
   }
-  for (let i = bag.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [bag[i], bag[j]] = [bag[j], bag[i]];
-  }
-  return bag;
+  const alt = [];
+  for (let i = 0; i < count; i++) alt.push(tokens[i % tokens.length]);
+  return alt;
 }
 
 function pickColor(source) {
@@ -221,7 +244,8 @@ function spawnFrom(source) {
     dist: 0,
     cars: 1,
     steam: 0,
-    committed: null,
+    committedEdge: null,
+    hubPts: null,
   });
   state.spawned += 1;
   burst(source.x, source.y, '#dfe6d2', 6, { speed: 28, lift: 6, life: 0.35 });
@@ -249,7 +273,7 @@ function requestToggle(sw) {
 function toggleSwitchAt(p) {
   if (state.mode !== 'play') return;
   let hit = null;
-  let bestD = HIT_R * 2;
+  let bestD = HIT_R;
   for (const n of Object.values(state.graph.nodes)) {
     if (n.kind !== 'switch') continue;
     const d = Math.hypot(n.x - p.x, n.y - p.y);
@@ -291,17 +315,31 @@ function finishTrain(tr, station) {
 function advanceTrain(tr, dt) {
   const nodeAhead = state.graph.nodes[tr.edge.to.nodeId];
   const len = polyLen(tr.edge.pts);
-  if (nodeAhead.kind === 'switch' && !tr.committed && (len - tr.dist) <= HUB_R) {
-    tr.committed = nextLiveEdge(state.graph, nodeAhead);
+  if (!tr.edge.hub && nodeAhead?.kind === 'switch' && !tr.committedEdge && (len - tr.dist) <= COMMIT_PAD) {
+    tr.committedArm = nodeAhead.arm;
+    tr.committedEdge = nextLiveEdge(state.graph, nodeAhead);
+    tr.hubPts = committedHub(nodeAhead);
   }
   tr.dist += SPEED * dt;
   if (tr.dist < len) return;
+  if (tr.edge.hub) {
+    tr.edge = tr.committedEdge;
+    tr.dist = 0;
+    tr.hubPts = null;
+    tr.committedEdge = null;
+    return;
+  }
   if (nodeAhead.kind === 'station') {
     finishTrain(tr, nodeAhead);
     return;
   }
-  const edge = tr.committed || nextLiveEdge(state.graph, nodeAhead);
-  tr.committed = null;
+  if (nodeAhead.kind === 'switch' && tr.hubPts) {
+    tr.edge = { pts: tr.hubPts, hub: true, from: { nodeId: nodeAhead.id }, to: { nodeId: nodeAhead.id } };
+    tr.dist = 0;
+    return;
+  }
+  const edge = tr.committedEdge || nextLiveEdge(state.graph, nodeAhead);
+  tr.committedEdge = null;
   if (!edge) {
     finishTrain(tr, nodeAhead);
     return;
@@ -441,78 +479,15 @@ function drawField() {
 }
 
 function strokeRail(pts, live) {
-  ctx.save();
-  ctx.globalAlpha = live ? 1 : 0.42;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'butt';
-  ctx.strokeStyle = '#1d2618';
-  ctx.lineWidth = 3.2;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
-    const len = hypot(a, b);
-    const ux = (b.x - a.x) / len;
-    const uy = (b.y - a.y) / len;
-    const px = -uy;
-    const py = ux;
-    for (let d = 7; d < len - 5; d += 9) {
-      const x = a.x + ux * d;
-      const y = a.y + uy * d;
-      ctx.beginPath();
-      ctx.moveTo(x + px * 7, y + py * 7);
-      ctx.lineTo(x - px * 7, y - py * 7);
-      ctx.stroke();
-    }
-  }
-  ctx.strokeStyle = live ? '#e7ead8' : '#c5cbb8';
-  ctx.lineWidth = 10;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.stroke();
-  ctx.strokeStyle = live ? '#2a3424' : '#3a4436';
-  ctx.lineWidth = 3.4;
-  ctx.stroke();
-  ctx.restore();
+  strokeCenterline(ctx, pts, {
+    alpha: live ? 1 : 0.42,
+    bed: live ? '#e7ead8' : '#c5cbb8',
+    gauge: live ? '#2a3424' : '#3a4436',
+  });
 }
 
 function drawInner(sw) {
-  const t = Math.min(1, sw.anim ?? 1);
-  const ang = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 };
-  const a0 = ang[sw.out0];
-  const a1 = ang[sw.out1];
-  const ain = ang[sw.inPort];
-  const fromA = sw.arm ? a1 : a0;
-  const prevA = sw.prevArm ? a1 : a0;
-  let d = fromA - prevA;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  const a = prevA + d * t;
-  const xIn = sw.x + Math.cos(ain) * HUB_R;
-  const yIn = sw.y + Math.sin(ain) * HUB_R;
-  const xOut = sw.x + Math.cos(a) * HUB_R;
-  const yOut = sw.y + Math.sin(a) * HUB_R;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(sw.x, sw.y, HUB_R - 1, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#eef3e0';
-  ctx.lineWidth = 11;
-  ctx.beginPath();
-  ctx.moveTo(xIn, yIn);
-  ctx.lineTo(sw.x, sw.y);
-  ctx.lineTo(xOut, yOut);
-  ctx.stroke();
-  ctx.strokeStyle = '#1e2818';
-  ctx.lineWidth = 3.6;
-  ctx.stroke();
-  ctx.fillStyle = '#eef3e0';
-  ctx.beginPath();
-  ctx.arc(sw.x, sw.y, 4.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  drawBlade(ctx, sw);
 }
 
 function drawStation(st) {
@@ -677,34 +652,16 @@ function render() {
   drawField();
   const g = state.graph;
   if (!g) return;
-  for (const n of Object.values(g.nodes)) {
-    if (n.kind !== 'switch') continue;
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, HUB_R + (n.flash || 0) * 6, 0, Math.PI * 2);
-    ctx.fillStyle = '#3d6b38';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(238,243,228,0.7)';
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
-  }
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(-2, -2, W + 4, H + 4);
-  for (const n of Object.values(g.nodes)) {
-    if (n.kind !== 'switch') continue;
-    ctx.moveTo(n.x + HUB_R, n.y);
-    ctx.arc(n.x, n.y, HUB_R - 0.6, 0, Math.PI * 2, true);
-  }
-  ctx.clip('evenodd');
+  for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawHub(ctx, n);
   for (const e of g.edges) strokeRail(e.pts, true);
-  ctx.restore();
-  for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawInner(n);
+  for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawBlade(ctx, n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);
   for (const s of g.sources) drawSource(s);
   for (const n of Object.values(g.nodes)) if (n.kind === 'station') drawStation(n);
   for (const tr of state.trains) drawLoco(tr);
   drawFx();
   if (state.debug) {
+    for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawPortsDebug(ctx, n);
     ctx.font = '700 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff8';
@@ -758,6 +715,9 @@ function step(dt) {
     }
   }
   for (const tr of state.trains) {
+    const to = state.graph.nodes[tr.edge.to.nodeId];
+    const remain = polyLen(tr.edge.pts) - tr.dist;
+    if (tr.edge.hub || (to?.kind === 'station' && remain < 46)) continue;
     tr.steam = (tr.steam || 0) - dt;
     if (tr.steam <= 0) {
       const p = trainPos(tr);

@@ -1,8 +1,10 @@
+import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=9';
+
 export const W = 390;
 export const H = 844;
-export const HUB_R = 22;
+export { HUB_R, DIR, opposite, hypot, switchPort };
 export const MERGE_R = 12;
-export const PORT_R = { switch: 0, merge: MERGE_R, station: 0, source: 0 };
+export const PORT_R = { switch: HUB_R, merge: MERGE_R, station: 0, source: 0 };
 export const PALETTE = {
   P: '#d46a9a', K: '#1c1c1c', G: '#3d8f44', Y: '#d4a017',
   B: '#3d8eb8', V: '#6b4f8a', W: '#e8eadc',
@@ -76,9 +78,6 @@ export function stageFor(level, rung = 0) {
 }
 export const STAGE = LEVELS.map((row) => stageFor(row.id, 0));
 
-export const DIR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
-export function opposite(port) { return { N: 'S', S: 'N', E: 'W', W: 'E' }[port]; }
-export function hypot(a, b) { return Math.hypot(b.x - a.x, b.y - a.y) || 1; }
 export function portPoint(node, port, extra = 0) {
   const r = (PORT_R[node.kind] || 0) + extra;
   const d = DIR[port];
@@ -149,6 +148,11 @@ export function along(pts, dist) {
   const prev = pts[pts.length - 2] || last;
   return { x: last.x, y: last.y, ang: Math.atan2(last.y - prev.y, last.x - prev.x) };
 }
+function axis(port) {
+  if (port === 'E' || port === 'W') return 'h';
+  if (port === 'N' || port === 'S') return 'v';
+  return 'd';
+}
 function routePorts(a, aPort, b, bPort) {
   const p0 = portPoint(a, aPort);
   const p1 = portPoint(b, bPort);
@@ -162,11 +166,11 @@ function routePorts(a, aPort, b, bPort) {
   const a1 = { x: p0.x + DIR[aPort][0] * stub, y: p0.y + DIR[aPort][1] * stub };
   const b1 = { x: p1.x + DIR[bPort][0] * stub, y: p1.y + DIR[bPort][1] * stub };
   const pts = [{ ...p0 }, a1];
-  if (aPort === 'E' || aPort === 'W') {
-    pts.push({ x: a1.x, y: b1.y });
+  if (axis(aPort) === 'v') {
+    pts.push({ x: b1.x, y: a1.y });
     pts.push(b1);
   } else {
-    pts.push({ x: b1.x, y: a1.y });
+    pts.push({ x: a1.x, y: b1.y });
     pts.push(b1);
   }
   pts.push({ ...p1 });
@@ -243,20 +247,20 @@ function mkSw(id, prefix, x, y, inPort, out0, out1) {
 }
 function layoutTwo(nodes, edges, tokens, region) {
   const [pink, black] = tokens;
-  const j = mkSw('J:', '', 104, 428, 'W', 'N', 'S');
+  const j = mkSw('J:', '', 148, 430, 'W', 'N', 'SE');
   const stP = {
     id: `ST:${pink}`, kind: 'station', color: pink,
-    x: j.x, y: j.y - 104, port: 'S', pulse: 0, ports: {},
+    x: j.x, y: j.y - 122, port: 'S', pulse: 0, ports: {},
   };
   const stK = {
     id: `ST:${black}`, kind: 'station', color: black,
-    x: j.x + 32, y: j.y + 80, port: 'N', pulse: 0, ports: {},
+    x: j.x + 64, y: j.y + 118, port: 'N', pulse: 0, ports: {},
   };
   nodes[j.id] = j;
   nodes[stP.id] = stP;
   nodes[stK.id] = stK;
   addEdge(edges, j, 'N', stP, 'S');
-  addEdge(edges, j, 'S', stK, 'N');
+  addEdge(edges, j, 'SE', stK, 'N');
   return j;
 }
 function layoutThree(nodes, edges, tokens, region) {
@@ -435,14 +439,7 @@ export function validateStage(graph) {
       if (hits.length !== 1) errors.push(`${source.id}/${color}: expected 1 station, got ${hits.length}`);
     }
   }
-  for (const sw of switches) {
-    const hub = { x: sw.x, y: sw.y };
-    for (const e of graph.edges) {
-      if (e.from.nodeId !== sw.id && e.to.nodeId !== sw.id) continue;
-      const end = e.from.nodeId === sw.id ? e.pts[0] : e.pts[e.pts.length - 1];
-      if (hypot(end, hub) > 2.5) errors.push(`switch ${sw.id}: rail ${e.id} misses hub`);
-    }
-  }
+  for (const sw of switches) errors.push(...assertSwitchGeometry(sw, graph.edges));
   return { ok: errors.length === 0, errors };
 }
 export function liveEdge(switchNode, edge) {
