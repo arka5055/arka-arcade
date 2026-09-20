@@ -30,22 +30,56 @@ export function switchPort(sw, port) {
   return { x: sw.x + Math.cos(a) * HUB_R, y: sw.y + Math.sin(a) * HUB_R, ang: a };
 }
 
-function cubic(a, c, b, t) {
-  const u = 1 - t;
-  return {
-    x: u * u * u * a.x + 3 * u * u * t * c.x + 3 * u * t * t * c.x + t * t * t * b.x,
-    y: u * u * u * a.y + 3 * u * u * t * c.y + 3 * u * t * t * c.y + t * t * t * b.y,
-  };
+function angNorm(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
 }
 
-export function hubCenterline(sw, fromPort, toPort, steps = 20) {
-  return hubCenterlinePts(switchPort(sw, fromPort), { x: sw.x, y: sw.y }, switchPort(sw, toPort), steps);
-}
-
-export function hubCenterlinePts(a, c, b, steps = 20) {
+export function hubCurveFromAngles(sw, angA, angB, steps = 24) {
+  const a = { x: sw.x + Math.cos(angA) * HUB_R, y: sw.y + Math.sin(angA) * HUB_R, ang: angA };
+  const b = { x: sw.x + Math.cos(angB) * HUB_R, y: sw.y + Math.sin(angB) * HUB_R, ang: angB };
+  const c = { x: sw.x, y: sw.y };
+  const delta = angNorm(angB - angA);
+  if (Math.abs(Math.abs(delta) - Math.PI) < 0.25) return [a, c, b];
+  const f = { x: a.x + b.x - c.x, y: a.y + b.y - c.y };
+  const r = hypot(a, f);
+  if (r > 6 && Math.abs(hypot(b, f) - r) < 4) {
+    const a0 = Math.atan2(a.y - f.y, a.x - f.x);
+    const a1 = Math.atan2(b.y - f.y, b.x - f.x);
+    const sweep = angNorm(a1 - a0);
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const ang = a0 + sweep * (i / steps);
+      pts.push({ x: f.x + Math.cos(ang) * r, y: f.y + Math.sin(ang) * r });
+    }
+    return pts;
+  }
+  const iA = { x: c.x + (a.x - c.x) * 0.38, y: c.y + (a.y - c.y) * 0.38 };
+  const iB = { x: c.x + (b.x - c.x) * 0.38, y: c.y + (b.y - c.y) * 0.38 };
   const pts = [];
-  for (let i = 0; i <= steps; i++) pts.push(cubic(a, c, b, i / steps));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const u = 1 - t;
+    pts.push({
+      x: u * u * u * a.x + 3 * u * u * t * iA.x + 3 * u * t * t * iB.x + t * t * t * b.x,
+      y: u * u * u * a.y + 3 * u * u * t * iA.y + 3 * u * t * t * iB.y + t * t * t * b.y,
+    });
+  }
   return pts;
+}
+
+export function hubCenterline(sw, fromPort, toPort, steps = 24) {
+  return hubCurveFromAngles(sw, PORT_ANG[fromPort], PORT_ANG[toPort], steps);
+}
+
+function overlapByPort(pts, angA, angB, d) {
+  if (!pts || pts.length < 2) return pts;
+  const a = pts[0];
+  const b = pts[pts.length - 1];
+  const pre = { x: a.x + Math.cos(angA) * d, y: a.y + Math.sin(angA) * d };
+  const post = { x: b.x + Math.cos(angB) * d, y: b.y + Math.sin(angB) * d };
+  return [pre, ...pts, post];
 }
 
 export function liveOutPort(sw) {
@@ -54,17 +88,18 @@ export function liveOutPort(sw) {
 
 export function bladePts(sw) {
   const t = Math.min(1, sw.anim ?? 1);
-  const from = (sw.prevArm ? sw.out1 : sw.out0);
+  const from = sw.prevArm ? sw.out1 : sw.out0;
   const to = liveOutPort(sw);
-  if (t >= 1 || from === to) return hubCenterline(sw, sw.inPort, to);
-  const a0 = PORT_ANG[from];
-  const a1 = PORT_ANG[to];
-  let d = a1 - a0;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  const a = a0 + d * t;
-  const end = { x: sw.x + Math.cos(a) * HUB_R, y: sw.y + Math.sin(a) * HUB_R };
-  return hubCenterlinePts(switchPort(sw, sw.inPort), { x: sw.x, y: sw.y }, end);
+  let angOut = PORT_ANG[to];
+  if (t < 1 && from !== to) {
+    const a0 = PORT_ANG[from];
+    const a1 = PORT_ANG[to];
+    let d = a1 - a0;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    angOut = a0 + d * t;
+  }
+  return overlapByPort(hubCurveFromAngles(sw, PORT_ANG[sw.inPort], angOut), PORT_ANG[sw.inPort], angOut, 8);
 }
 
 export function committedHub(sw) {
@@ -117,16 +152,29 @@ export function strokeCenterline(ctx, pts, opts = {}) {
 export function drawHub(ctx, sw) {
   ctx.beginPath();
   ctx.arc(sw.x, sw.y, HUB_R + (sw.flash || 0) * 6, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(70, 138, 62, 0.40)';
+  ctx.fillStyle = 'rgba(82, 148, 78, 0.55)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(238,243,228,0.8)';
-  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(238,243,228,0.88)';
+  ctx.lineWidth = 2.4;
   ctx.stroke();
+  const live = liveOutPort(sw);
+  for (const port of [sw.inPort, sw.out0, sw.out1]) {
+    if (port === sw.inPort || port === live) continue;
+    const p = switchPort(sw, port);
+    const inner = {
+      x: sw.x + (p.x - sw.x) * 0.22,
+      y: sw.y + (p.y - sw.y) * 0.22,
+    };
+    strokeCenterline(ctx, [p, inner], {
+      width: 10, sleepers: false, cap: 'butt', alpha: 0.55,
+      bed: '#d5dbc8', gauge: '#3a4436',
+    });
+  }
 }
 
 export function drawBlade(ctx, sw) {
   strokeCenterline(ctx, bladePts(sw), {
-    width: 11,
+    width: 10.5,
     bed: '#eef3e0',
     gauge: '#1e2818',
     sleepers: false,

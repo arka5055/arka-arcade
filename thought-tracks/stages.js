@@ -1,5 +1,5 @@
 import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=9';
-import { strokeCenterline, HUB_R } from './switch.js?v=9';
+import { strokeCenterline, HUB_R } from './switch.js?v=18';
 
 const thumbs = new Map();
 

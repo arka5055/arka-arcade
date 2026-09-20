@@ -9,7 +9,7 @@ import {
   HUB_R, HIT_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=9';
+} from './switch.js?v=18';
 import { thumbnail, stageMeta } from './stages.js?v=10';
 
 const canvas = document.getElementById('game');
@@ -682,6 +682,7 @@ function strokeRail(pts, live) {
     alpha: live ? 1 : 0.42,
     bed: live ? '#e7ead8' : '#c5cbb8',
     gauge: live ? '#2a3424' : '#3a4436',
+    cap: 'round',
   });
 }
 
