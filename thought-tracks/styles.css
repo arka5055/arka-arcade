@@ -174,8 +174,8 @@ a.home-link {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 10px;
-  padding: max(72px, calc(env(safe-area-inset-top) + 56px)) 12px calc(18px + env(safe-area-inset-bottom));
+  gap: 8px;
+  padding: 0 12px calc(18px + env(safe-area-inset-bottom));
   background: #243826;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -183,21 +183,41 @@ a.home-link {
   touch-action: pan-y;
 }
 .overlay.stages.hidden { display: none; }
+body.stages-open .arcade-home { display: none; }
 
 .stages-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0 -12px;
+  padding: max(54px, calc(env(safe-area-inset-top) + 8px)) 12px 10px;
+  background: #243826;
   color: var(--cream);
 }
-.stages-head h1 { margin: 0; font-size: 28px; }
+.stages-head h1 { margin: 0; font-size: 24px; }
 .stages-head .kicker {
   margin: 0 0 2px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.2em;
   opacity: 0.6;
+}
+.stages-home {
+  display: inline-grid;
+  place-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #0b1014;
+  color: #f2efe6;
+  font: 700 10px/1 inherit;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
 }
 .stages-head .icon {
   width: 44px;
@@ -209,9 +229,10 @@ a.home-link {
   font: 700 22px/1 inherit;
 }
 .stages-continue {
-  margin: 0 0 4px;
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--cream);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   opacity: 0.8;
 }
@@ -265,8 +286,8 @@ a.home-link {
 }
 .stage-card b {
   display: block;
-  margin-top: 8px;
-  font-size: 13px;
+  margin-top: 6px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 .stage-card .meta {
@@ -278,8 +299,8 @@ a.home-link {
 }
 .stage-card .best {
   display: block;
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 1px;
+  font-size: 11px;
   font-weight: 800;
 }
 .stage-card.continue { border-color: #d4a017; }

@@ -24,6 +24,10 @@ export function goalLine(spec) {
   if (spec.need) return `${spec.need} of ${spec.total}`;
   return spec.miss === 1 ? '≤1 MISS' : `≤${spec.miss} MISSES`;
 }
+export function goalShort(spec) {
+  if (spec.need) return `${spec.need}/${spec.total}`;
+  return `≤${spec.miss}`;
+}
 
 function balancedBits(n) {
   const out = [];
@@ -50,12 +54,12 @@ const LEVELS = [
   { id: 6, n: 6, shape: 'balanced', cap: 5, conc: 5.0, pool: 28, time: 84, miss: 3, pressure: 3, intro: 'Several trains may be on the rails at once.' },
   { id: 7, n: 7, shape: 'three', cap: 6, conc: 4.2, pool: 34, time: 94, miss: 3, pressure: 3, intro: 'Scan the whole board. Downstream switches stay set.' },
   { id: 8, n: 8, shape: 'balanced', cap: 7, conc: 5.2, pool: 42, time: 102, miss: 3, pressure: 4, intro: 'NEW: Two-color trains go to the two-color station.' },
-  { id: 9, n: 9, shape: 'mixed', cap: 5, conc: 4.4, pool: 48, time: 108, miss: 3, pressure: 3, intro: 'Two switches can need a tap at almost the same time.' },
+  { id: 9, n: 9, shape: 'mixed', cap: 7, conc: 5.3, pool: 48, time: 108, miss: 3, pressure: 4, intro: 'Two switches can need a tap at almost the same time.' },
   { id: 10, n: 10, shape: 'long', cap: 7, conc: 5.4, pool: 56, time: 114, miss: 3, pressure: 4, intro: 'The first switch may serve two trains in a row.' },
-  { id: 11, n: 11, shape: 'mixed', cap: 6, conc: 5.1, pool: 64, time: 120, miss: 2, pressure: 3, intro: 'At most 2 misses this round.' },
-  { id: 12, n: 12, shape: 'three', cap: 6, conc: 5.4, pool: 68, time: 120, miss: 2, pressure: 3, intro: 'Park one plan. Service the nearer train. Resume.' },
-  { id: 13, n: 13, shape: 'mixed', cap: 7, conc: 5.8, pool: 74, time: 120, miss: 1, pressure: 3, intro: 'At most 1 miss this round.' },
-  { id: 14, n: 14, shape: 'balanced', cap: 7, conc: 6.2, pool: 72, time: 120, miss: 1, pressure: 3, intro: 'Releases adapt to how you play.' },
+  { id: 11, n: 11, shape: 'mixed', cap: 7, conc: 5.5, pool: 64, time: 120, miss: 2, pressure: 4, intro: 'At most 2 misses this round.' },
+  { id: 12, n: 12, shape: 'three', cap: 7, conc: 5.6, pool: 68, time: 120, miss: 2, pressure: 4, intro: 'Park one plan. Service the nearer train. Resume.' },
+  { id: 13, n: 13, shape: 'mixed', cap: 7, conc: 5.8, pool: 74, time: 120, miss: 1, pressure: 4, intro: 'At most 1 miss this round.' },
+  { id: 14, n: 14, shape: 'balanced', cap: 7, conc: 6.2, pool: 72, time: 120, miss: 1, pressure: 4, intro: 'Releases adapt to how you play.' },
   { id: 15, n: 14, shape: 'long', cap: 7, conc: 6.4, pool: 90, time: 120, miss: 1, pressure: 3, intro: 'Opposite states at the same switch, closer together.' },
   { id: 16, n: 14, shape: 'three', cap: 7, conc: 6.6, pool: 90, time: 120, miss: 1, pressure: 3, intro: 'Hold the full board until the last train.' },
 ];

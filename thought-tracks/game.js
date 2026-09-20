@@ -4,14 +4,14 @@ import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
-  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=30';
+  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine, goalShort,
+} from './graph.js?v=31';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
 } from './switch.js?v=26';
-import { thumbnail, stageMeta } from './stages.js?v=17';
+import { thumbnail, stageMeta } from './stages.js?v=18';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -596,26 +596,14 @@ function renderStages() {
     }
     const title = document.createElement('b');
     title.textContent = `STAGE ${level}`;
-    card.append(title);
-    if (done) {
-      const status = document.createElement('span');
-      status.className = 'status';
-      status.textContent = '✓  CLEARED';
-      card.append(status);
-    }
-    const stations = document.createElement('span');
-    stations.className = 'meta';
-    stations.textContent = `${meta.stations} stations`;
-    const trains = document.createElement('span');
-    trains.className = 'meta';
-    trains.textContent = `up to ${trainLabel(meta.cap)}`;
-    const bestLine = document.createElement('span');
-    bestLine.className = 'best';
-    bestLine.textContent = rec ? `Best: ${rec.home} / ${rec.quota}` : 'Best: —';
-    const goal = document.createElement('span');
-    goal.className = 'meta';
-    goal.textContent = `Goal: ${goalLine(stageFor(level, 0))}`;
-    card.append(stations, trains, goal, bestLine);
+    const line = document.createElement('span');
+    line.className = 'meta';
+    line.textContent = `${meta.stations} stations · up to ${meta.cap} trains`;
+    const foot = document.createElement('span');
+    foot.className = 'best';
+    const best = rec ? rec.home : '—';
+    foot.textContent = `Goal ${goalShort(stageFor(level, 0))} · Best ${best}`;
+    card.append(title, line, foot);
     card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
@@ -623,6 +611,7 @@ function renderStages() {
 
 function openStages(from = 'play') {
   unlockAudio();
+  document.body.classList.add('stages-open');
   stagesReturn = from;
   if (from === 'play' && state.mode === 'play') state.mode = 'pause';
   ui.pause.classList.add('hidden');
@@ -632,6 +621,7 @@ function openStages(from = 'play') {
 }
 
 function closeStages() {
+  document.body.classList.remove('stages-open');
   ui.stages.classList.add('hidden');
   if (stagesReturn === 'done') {
     ui.done.classList.remove('hidden');
@@ -644,6 +634,7 @@ function closeStages() {
 }
 
 function pickStage(level) {
+  document.body.classList.remove('stages-open');
   ui.stages.classList.add('hidden');
   ui.pause.classList.add('hidden');
   ui.done.classList.add('hidden');
