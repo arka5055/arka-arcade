@@ -1,4 +1,4 @@
-import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry, trimRailToHubs } from './switch.js?v=24';
+import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry, trimRailToHubs } from './switch.js?v=25';
 
 export const W = 390;
 export const H = 844;
@@ -22,7 +22,7 @@ export function tokenLabel(token) {
 }
 export function goalLine(spec) {
   if (spec.need) return `${spec.need} of ${spec.total}`;
-  return `≤${spec.miss} miss${spec.miss === 1 ? '' : 'es'}`;
+  return spec.miss === 1 ? '≤1 MISS' : `≤${spec.miss} MISSES`;
 }
 
 function balancedBits(n) {
@@ -385,26 +385,21 @@ function layoutFour(nodes, edges, tokens, region) {
 function layoutSix(nodes, edges, tokens, region) {
   const [pink, black, green, yellow, blue, violet] = tokens;
   const p = (x, y) => atPct(region, x, y);
-  const j1p = p(26, 50);
-  const j2p = p(46, 28);
-  const j3p = p(74, 16);
-  const j4p = p(46, 72);
-  const j5p = p(74, 84);
-  const j1 = mkSw('J:', '', j1p.x, j1p.y, 'W', 'NE', 'SE');
-  const j2 = mkSw('J:0', '0', j2p.x, j2p.y, 'SW', 'N', 'E');
-  const j3 = mkSw('J:01', '01', j3p.x, j3p.y, 'W', 'NE', 'SE');
-  const j4 = mkSw('J:1', '1', j4p.x, j4p.y, 'NW', 'E', 'SE');
-  const j5 = mkSw('J:11', '11', j5p.x, j5p.y, 'W', 'NE', 'SE');
-  j1.sourceAt = p(7, 50);
+  const j1 = mkSw('J:', '', ...xy(p(38, 50)), 'W', 'NE', 'SE');
+  const j2 = mkSw('J:0', '0', ...xy(p(56, 30)), 'SW', 'N', 'E');
+  const j3 = mkSw('J:01', '01', ...xy(p(82, 20)), 'W', 'NE', 'SE');
+  const j4 = mkSw('J:1', '1', ...xy(p(56, 68)), 'NW', 'E', 'SE');
+  const j5 = mkSw('J:11', '11', ...xy(p(82, 82)), 'W', 'NE', 'SE');
+  j1.sourceAt = p(5, 50);
   const st = (color, x, y, port) => ({
     id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
   });
-  const stP = st(pink, 46, 5, 'S');
-  const stK = st(black, 93, 8, 'SW');
-  const stG = st(green, 93, 32, 'NW');
-  const stY = st(yellow, 93, 62, 'W');
-  const stB = st(blue, 93, 78, 'SW');
-  const stV = st(violet, 93, 94, 'NW');
+  const stP = st(pink, 56, 10, 'S');
+  const stK = st(black, 90, 16, 'SW');
+  const stG = st(green, 90, 40, 'NW');
+  const stY = st(yellow, 80, 58, 'W');
+  const stB = st(blue, 90, 76, 'SW');
+  const stV = st(violet, 90, 94, 'NW');
   for (const n of [j1, j2, j3, j4, j5, stP, stK, stG, stY, stB, stV]) nodes[n.id] = n;
   addCurve(edges, j1, 'NE', j2, 'SW');
   addCurve(edges, j1, 'SE', j4, 'NW');
@@ -454,7 +449,7 @@ function layoutSeven(nodes, edges, tokens, region) {
   return j1;
 }
 function xy(pt) { return [pt.x, pt.y]; }
-function playRegion() { return { x0: 28, y0: 132, x1: 362, y1: 708 }; }
+function playRegion() { return { x0: 28, y0: 168, x1: 362, y1: 708 }; }
 
 export function buildStage(level, rung = 0) {
   const spec = stageFor(level, rung);

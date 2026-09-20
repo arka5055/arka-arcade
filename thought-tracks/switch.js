@@ -1,6 +1,6 @@
 /** Canonical turnout: one pivot, three ports, a blade that trains follow. */
 
-export const HUB_R = 22;
+export const HUB_R = 19;
 export const HIT_R = 48;
 export const COMMIT_PAD = 2;
 export const FILLET_R = 8.5;
@@ -226,15 +226,12 @@ export function drawHub(ctx, sw) {
 
 export function drawPivot(ctx, sw) {
   ctx.beginPath();
-  ctx.arc(sw.x, sw.y, 3.4, 0, Math.PI * 2);
-  ctx.fillStyle = '#eef3e0';
+  ctx.arc(sw.x, sw.y, 2.1, 0, Math.PI * 2);
+  ctx.fillStyle = '#1c2818';
   ctx.fill();
-  ctx.strokeStyle = '#2a3424';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
   ctx.beginPath();
-  ctx.arc(sw.x, sw.y, 1.35, 0, Math.PI * 2);
-  ctx.fillStyle = '#2a3424';
+  ctx.arc(sw.x, sw.y, 1.05, 0, Math.PI * 2);
+  ctx.fillStyle = '#eef3e0';
   ctx.fill();
 }
 

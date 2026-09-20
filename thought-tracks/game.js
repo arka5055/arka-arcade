@@ -5,12 +5,12 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=26';
+} from './graph.js?v=27';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=24';
+} from './switch.js?v=25';
 import { thumbnail, stageMeta } from './stages.js?v=16';
 
 const canvas = document.getElementById('game');
@@ -534,7 +534,7 @@ function startLevel(level, rung = state.rung) {
     graph,
     trains: [],
     fx: [],
-    hint: spec.intro ? (level === 1 ? 99 : 3.4) : 0,
+    hint: spec.intro && level < 6 ? (level === 1 ? 99 : 1.8) : 0,
     intro: spec.intro || '',
     flash: 0,
     home: 0,
@@ -901,20 +901,15 @@ function render() {
   }
   if (state.hint > 0 && state.intro) {
     ctx.globalAlpha = Math.min(1, state.hint);
+    ctx.fillStyle = 'rgba(18, 32, 18, 0.72)';
+    roundRect(48, H - 118, W - 96, 36, 12);
+    ctx.fill();
     ctx.fillStyle = '#eef3e4';
-    ctx.font = '800 12px Trebuchet MS, sans-serif';
+    ctx.font = '700 12px Trebuchet MS, sans-serif';
     ctx.textAlign = 'center';
-    const words = state.intro.split(' ');
-    let line = '', y = 116;
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (ctx.measureText(test).width > 340) {
-        ctx.fillText(line, W / 2, y);
-        line = w;
-        y += 16;
-      } else line = test;
-    }
-    if (line) ctx.fillText(line, W / 2, y);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(state.intro, W / 2, H - 100);
+    ctx.textBaseline = 'alphabetic';
     ctx.globalAlpha = 1;
   }
 }
