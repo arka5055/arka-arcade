@@ -25,22 +25,20 @@ function scoreLine(game) {
   try {
     if (spec.kind === "number") {
       const value = Number(localStorage.getItem(spec.key) || 0);
-      return value > 0 ? `${spec.label} ${value}` : "";
+      return `${spec.label} ${value > 0 ? value : "—"}`;
     }
     const data = readJson(spec.key);
-    if (!data) return "";
     if (spec.kind === "json") {
-      const value = Number(data[spec.field] || 0);
-      return value > 0 ? `${spec.label} ${value}` : "";
+      const value = Number(data?.[spec.field] || 0);
+      return `${spec.label} ${value > 0 ? value : "—"}`;
     }
     if (spec.kind === "vs") {
-      const you = Number(data[spec.you] ?? data.cpu?.[spec.you] ?? 0);
-      const them = Number(data[spec.them] ?? data.cpu?.[spec.them] ?? 0);
-      if (!you && !them) return "";
+      const you = Number(data?.[spec.you] ?? data?.cpu?.[spec.you] ?? 0);
+      const them = Number(data?.[spec.them] ?? data?.cpu?.[spec.them] ?? 0);
       return `${spec.label} ${you}–${them}`;
     }
   } catch {
-    return "";
+    return spec.label;
   }
   return "";
 }
@@ -63,8 +61,8 @@ function card(game, resumeId) {
   const meta = [
     el("p", { class: "kind", text: game.kind }),
     el("h2", { text: game.title }),
+    el("p", { class: "best", text: line || "Best —" }),
   ];
-  if (line) meta.push(el("p", { class: "best", text: line }));
   if (game.id === resumeId) meta.push(el("p", { class: "resume-tag", text: "Resume" }));
   const copy = el("div", { class: "copy" }, meta);
   const link = el("a", { class: `game ${game.id}`, href: game.path }, [shot, copy]);

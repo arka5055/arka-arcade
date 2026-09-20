@@ -1,7 +1,12 @@
 * { box-sizing: border-box; }
-html, body {
-  margin: 0;
+html {
   height: 100%;
+  background: var(--bg);
+}
+body {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100svh;
   min-height: 100dvh;
   background: var(--bg);
   color: var(--fg);
@@ -9,30 +14,30 @@ html, body {
 }
 a { color: inherit; text-decoration: none; }
 .page {
-  height: 100dvh;
+  box-sizing: border-box;
+  width: 100%;
   max-width: 560px;
+  min-height: 100svh;
+  min-height: 100dvh;
   margin: 0 auto;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding:
-    calc(16px + env(safe-area-inset-top))
-    14px
-    calc(14px + env(safe-area-inset-bottom));
-  overflow: hidden;
+    max(72px, calc(env(safe-area-inset-top) + 56px))
+    16px
+    max(18px, env(safe-area-inset-bottom));
 }
-.mast { margin: 0; }
+.mast { margin: 0; flex: 0 0 auto; }
 .mast h1 {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(1.8rem, 7vw, 2.4rem);
+  font-size: clamp(2rem, 8vw, 2.6rem);
   font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
-.lede {
-  display: none;
-}
+.lede { display: none; }
 .resume-slot:empty { display: none; }
 .resume {
   display: grid;
@@ -42,8 +47,9 @@ a { color: inherit; text-decoration: none; }
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--elev);
+  flex: 0 0 auto;
 }
 .resume-kicker,
 .resume-score,
@@ -65,26 +71,28 @@ a { color: inherit; text-decoration: none; }
 }
 .resume-score { color: var(--fg); }
 .games {
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 10px;
-  min-height: 0;
+  gap: 12px;
+  min-height: 62svh;
 }
 .game {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
   background: var(--elev);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 22px;
   -webkit-tap-highlight-color: transparent;
 }
 .game.is-resume { border-color: rgba(242, 239, 230, 0.32); }
 .shot {
   position: relative;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 132px;
   overflow: hidden;
   background: #101418;
 }
@@ -96,22 +104,26 @@ a { color: inherit; text-decoration: none; }
   object-fit: cover;
   display: block;
 }
-.copy { padding: 10px 12px 12px; }
+.copy {
+  flex: 0 0 auto;
+  padding: 12px 14px 14px;
+}
 .kind { margin: 0 0 4px; }
 h2 {
   margin: 0;
   font-family: var(--display);
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  min-height: 2.3em;
 }
-.best, .resume-tag { margin: 6px 0 0; }
-.resume-tag { color: var(--fg); }
+.best { margin: 8px 0 0; color: var(--fg); }
+.resume-tag { margin: 6px 0 0; color: var(--fg); }
 .game:active { transform: scale(0.985); }
-.arka-stamp { margin: 0; }
+.arka-stamp { margin: 0; flex: 0 0 auto; }
 @media (min-width: 720px) {
-  .page { max-width: 720px; height: auto; min-height: 100dvh; overflow: auto; }
+  .page { max-width: 720px; }
   .lede {
     display: block;
     margin: 8px 0 0;
@@ -120,15 +132,16 @@ h2 {
     line-height: 1.45;
     font-size: 0.95rem;
   }
-  .games { min-height: 520px; }
-  h2 { font-size: 1.25rem; }
+  .games { min-height: 560px; }
+  h2 { font-size: 1.3rem; min-height: 0; }
+  .shot { min-height: 180px; }
 }
 @media (min-width: 1100px) {
   .page { max-width: 1100px; }
   .games {
     grid-template-columns: 1fr 1fr 1fr 1fr;
     grid-template-rows: 1fr;
-    min-height: 420px;
+    min-height: 460px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
