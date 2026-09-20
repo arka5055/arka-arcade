@@ -3,8 +3,10 @@ const LINES = [
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
   [0, 4, 8], [2, 4, 6],
 ];
-
+const ORDER = [4, 0, 2, 6, 8, 1, 3, 5, 7];
 const SAVE = "arcade-infinite-v1";
+const AI = "O";
+const HUMAN = "X";
 
 function emptyState() {
   return {
@@ -35,10 +37,7 @@ function applyMove(state, cell) {
   const next = clone(state);
   const player = next.turn;
   const queue = next.queues[player];
-  if (queue.length >= 3) {
-    const oldest = queue.shift();
-    next.board[oldest] = null;
-  }
+  if (queue.length >= 3) next.board[queue.shift()] = null;
   next.board[cell] = player;
   queue.push(cell);
   const line = winningLine(next.board, player);
@@ -57,28 +56,69 @@ function fadingCell(state) {
 }
 
 function empties(state) {
-  const cells = [];
-  for (let i = 0; i < 9; i += 1) if (state.board[i] == null) cells.push(i);
-  return cells;
+  return ORDER.filter((i) => state.board[i] == null);
 }
 
-function evaluate(state, ai) {
-  if (state.winner === ai) return 120;
-  if (state.winner) return -120;
-  return 0;
+function winningMoves(state) {
+  return empties(state).filter((cell) => applyMove(state, cell)?.winner === state.turn);
 }
 
-function minimax(state, ai, depth, alpha, beta) {
-  const score = evaluate(state, ai);
-  if (score !== 0 || depth === 0) return { score: score + (score > 0 ? depth : score < 0 ? -depth : 0), cell: -1 };
+function keyOf(state) {
+  return `${state.turn}|${state.board.map((c) => c || ".").join("")}|${state.queues.X.join("")}|${state.queues.O.join("")}`;
+}
+
+function shape(state, player) {
+  const oldest = state.queues[player][0];
+  const vanish = state.queues[player].length >= 3 && state.turn === player;
+  let score = 0;
+  if (state.board[4] === player) score += 5;
+  for (const i of [0, 2, 6, 8]) if (state.board[i] === player) score += 2;
+  for (const line of LINES) {
+    let mine = 0;
+    let live = 0;
+    let opp = 0;
+    let empty = 0;
+    for (const i of line) {
+      const mark = state.board[i];
+      if (mark === player) {
+        mine += 1;
+        if (!(vanish && i === oldest)) live += 1;
+      } else if (mark) opp += 1;
+      else empty += 1;
+    }
+    if (opp !== 0) continue;
+    if (live === 2 && empty === 1) score += 18;
+    else if (mine === 2 && empty === 1) score += 5;
+    else if (live === 1 && empty === 2) score += 3;
+  }
+  return score;
+}
+
+function evaluate(state) {
+  if (state.winner === AI) return 400;
+  if (state.winner === HUMAN) return -400;
+  return shape(state, AI) - shape(state, HUMAN);
+}
+
+function minimax(state, depth, alpha, beta, table, deadline) {
+  if (state.winner || depth === 0) {
+    const score = evaluate(state);
+    return { score: score + (score > 0 ? depth : score < 0 ? -depth : 0), cell: -1 };
+  }
+  if (deadline && performance.now() > deadline) return { score: evaluate(state), cell: -1, cutoff: true };
+  const cached = table.get(keyOf(state));
+  if (cached && cached.depth >= depth) return { score: cached.score, cell: cached.cell };
   const moves = empties(state);
   if (!moves.length) return { score: 0, cell: -1 };
-  const maximizing = state.turn === ai;
+  const maximizing = state.turn === AI;
   let best = { score: maximizing ? -Infinity : Infinity, cell: moves[0] };
-  for (const cell of moves) {
+  const winsNow = winningMoves(state);
+  const ordered = winsNow.concat(moves.filter((cell) => !winsNow.includes(cell)));
+  for (const cell of ordered) {
     const next = applyMove(state, cell);
     if (!next) continue;
-    const result = minimax(next, ai, depth - 1, alpha, beta);
+    const result = minimax(next, depth - 1, alpha, beta, table, deadline);
+    if (result.cutoff) return result;
     if (maximizing) {
       if (result.score > best.score) best = { score: result.score, cell };
       alpha = Math.max(alpha, result.score);
@@ -88,31 +128,44 @@ function minimax(state, ai, depth, alpha, beta) {
     }
     if (beta <= alpha) break;
   }
+  table.set(keyOf(state), { depth, score: best.score, cell: best.cell });
   return best;
 }
 
 function cpuMove(state) {
-  const depth = empties(state).length >= 7 ? 5 : 8;
-  return minimax(state, "O", depth, -Infinity, Infinity).cell;
+  const wins = winningMoves(state);
+  if (wins.length) return wins[0];
+  const table = new Map();
+  let best = empties(state)[0] ?? 4;
+  const deadline = performance.now() + 90;
+  for (let depth = 2; depth <= 12; depth += 1) {
+    const result = minimax(state, depth, -Infinity, Infinity, table, deadline);
+    if (result.cutoff) break;
+    if (result.cell >= 0) best = result.cell;
+  }
+  return best;
 }
 
-const boardEl = document.getElementById("board");
-const turnEl = document.getElementById("turn");
-const hintEl = document.getElementById("hint");
-const scoreEl = document.getElementById("score");
-const titleEl = document.getElementById("title");
-const doneEl = document.getElementById("done");
-const doneTitle = document.getElementById("done-title");
-const doneCopy = document.getElementById("done-copy");
+export { applyMove, cpuMove, emptyState, winningMoves, HUMAN, AI };
 
-let mode = "cpu";
+const boardEl = typeof document === "undefined" ? null : document.getElementById("board");
+if (boardEl) {
+  const turnEl = document.getElementById("turn");
+  const hintEl = document.getElementById("hint");
+  const scoreEl = document.getElementById("score");
+  const titleEl = document.getElementById("title");
+  const doneEl = document.getElementById("done");
+  const doneTitle = document.getElementById("done-title");
+  const doneCopy = document.getElementById("done-copy");
+
 let state = emptyState();
 let locked = false;
-let scores = { cpu: { you: 0, cpu: 0 }, hotseat: { X: 0, O: 0 } };
+let scores = { you: 0, cpu: 0 };
 
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE) || "null");
-  if (saved?.cpu) scores = saved;
+  if (typeof saved?.you === "number") scores = { you: saved.you, cpu: saved.cpu || 0 };
+  else if (saved?.cpu?.you != null) scores = { you: saved.cpu.you, cpu: saved.cpu.cpu || 0 };
 } catch {
   /* keep defaults */
 }
@@ -159,38 +212,29 @@ function render() {
     }
   }
   if (state.winner) {
-    turnEl.textContent = state.winner === "X" ? (mode === "cpu" ? "YOU WIN" : "X WINS") : mode === "cpu" ? "CPU WINS" : "O WINS";
+    turnEl.textContent = state.winner === HUMAN ? "YOU WIN" : "CPU WINS";
     turnEl.className = `turn is-${state.winner.toLowerCase()}`;
   } else {
-    const yours = mode === "cpu" && state.turn === "X";
-    turnEl.textContent = yours ? "YOUR MOVE" : mode === "cpu" ? "CPU THINKING" : `${state.turn} TO MOVE`;
+    turnEl.textContent = state.turn === HUMAN ? "YOUR MOVE" : "CPU THINKING";
     turnEl.className = `turn is-${state.turn.toLowerCase()}`;
   }
-  if (mode === "cpu") scoreEl.textContent = `YOU ${scores.cpu.you} · CPU ${scores.cpu.cpu}`;
-  else scoreEl.textContent = `X ${scores.hotseat.X} · O ${scores.hotseat.O}`;
+  scoreEl.textContent = `YOU ${scores.you} · CPU ${scores.cpu}`;
   hintEl.textContent = fade == null
     ? "You keep three marks. The oldest fades, then vanishes."
     : "The dashed mark will vanish on this turn.";
 }
 
 function showDone() {
-  const youWin = mode === "cpu" ? state.winner === "X" : true;
-  if (mode === "cpu") {
-    doneTitle.textContent = state.winner === "X" ? "You win" : "CPU wins";
-    doneCopy.textContent = state.winner === "X"
-      ? "Three in a row after the oldest mark vanished."
-      : "The vanishing mark opened a line. Try again.";
-  } else {
-    doneTitle.textContent = `${state.winner} wins`;
-    doneCopy.textContent = "Pass the phone. First to three after a vanish.";
-  }
-  doneEl.classList.toggle("you", youWin);
+  doneTitle.textContent = state.winner === HUMAN ? "You win" : "CPU wins";
+  doneCopy.textContent = state.winner === HUMAN
+    ? "Three in a row after the oldest mark vanished."
+    : "The vanishing mark opened a line. Try again.";
   doneEl.classList.remove("hidden");
-  tone(state.winner === "X" ? 523 : 196, 0.22, "triangle", 0.06);
+  tone(state.winner === HUMAN ? 523 : 196, 0.22, "triangle", 0.06);
 }
 
 function maybeCpu() {
-  if (mode !== "cpu" || state.turn !== "O" || state.winner) return;
+  if (state.turn !== AI || state.winner) return;
   locked = true;
   render();
   window.setTimeout(() => {
@@ -203,23 +247,22 @@ function maybeCpu() {
     locked = false;
     render();
     if (state.winner) {
-      scores.cpu.cpu += 1;
+      scores.cpu += 1;
       persist();
       showDone();
     }
-  }, 420);
+  }, 280);
 }
 
 function play(cell) {
-  if (locked) return;
+  if (locked || state.turn !== HUMAN) return;
   const next = applyMove(state, cell);
   if (!next) return;
   state = next;
-  tone(state.turn === "O" || state.winner === "X" ? 494 : 392, 0.07);
+  tone(494, 0.07);
   render();
   if (state.winner) {
-    if (mode === "cpu") scores.cpu.you += 1;
-    else scores.hotseat[state.winner] += 1;
+    scores.you += 1;
     persist();
     showDone();
     return;
@@ -227,8 +270,7 @@ function play(cell) {
   maybeCpu();
 }
 
-function start(nextMode) {
-  mode = nextMode;
+function start() {
   state = emptyState();
   locked = false;
   titleEl.classList.add("hidden");
@@ -246,9 +288,8 @@ for (let i = 0; i < 9; i += 1) {
   boardEl.append(cell);
 }
 
-document.getElementById("btn-cpu").addEventListener("click", () => start("cpu"));
-document.getElementById("btn-hotseat").addEventListener("click", () => start("hotseat"));
-document.getElementById("btn-again").addEventListener("click", () => start(mode));
+document.getElementById("btn-play").addEventListener("click", start);
+document.getElementById("btn-again").addEventListener("click", start);
 document.getElementById("btn-new").addEventListener("click", () => {
   doneEl.classList.add("hidden");
   titleEl.classList.remove("hidden");
@@ -257,3 +298,4 @@ document.getElementById("btn-new").addEventListener("click", () => {
 });
 
 render();
+}
