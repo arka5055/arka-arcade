@@ -1,5 +1,5 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
-import { loadTracks, saveTracks } from '/progress.js?v=1';
+import { loadTracks, saveTracks } from '/progress.js?v=2';
 import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,

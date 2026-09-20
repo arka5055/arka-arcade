@@ -1,4 +1,4 @@
-import { summary } from "/progress.js?v=1";
+import { summary } from "/progress.js?v=2";
 
 const LAST_KEY = "arka-arcade-last";
 

@@ -1,5 +1,5 @@
 import { onLeaveApp } from "/leave-pause.js";
-import { loadInfinite, saveInfinite } from "/progress.js?v=1";
+import { loadInfinite, saveInfinite } from "/progress.js?v=2";
 
 const LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],

@@ -66,7 +66,31 @@ export async function loadGameStats(): Promise<GameStats> {
 
 export async function saveGameStats(stats: GameStats): Promise<void> {
   try {
-    await AsyncStorage.setItem(STATS_KEY, JSON.stringify(normalizeStats(stats)));
+    const normalized = normalizeStats(stats);
+    await AsyncStorage.setItem(STATS_KEY, JSON.stringify(normalized));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const hubKey = 'arka-arcade-progress-v1';
+      const raw = window.localStorage.getItem(hubKey);
+      const hub = raw ? JSON.parse(raw) : {};
+      const prev = hub.skyline || {};
+      const sectors = Array.from(new Set([
+        ...(Array.isArray(prev.sectors) ? prev.sectors : []),
+        ...normalized.completedSectors,
+      ])).sort((a, b) => a - b);
+      const achievements = Array.from(new Set([
+        ...(Array.isArray(prev.achievements) ? prev.achievements : []),
+        ...normalized.achievements,
+      ]));
+      hub.skyline = {
+        best: Math.max(Number(prev.best) || 0, normalized.highScore || 0),
+        unlocked: Math.max(Number(prev.unlocked) || 0, normalized.unlockedLevels || 0),
+        sectors,
+        achievements,
+        stats: normalized,
+      };
+      hub.updated = Date.now();
+      window.localStorage.setItem(hubKey, JSON.stringify(hub));
+    }
   } catch (error) {
     console.error('Failed to save stats', error);
   }

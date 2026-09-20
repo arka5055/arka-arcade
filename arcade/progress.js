@@ -1,6 +1,7 @@
-/** Shared ARKA Arcade save. Each game also keeps its own legacy key. */
+/** Shared ARKA Arcade save. localStorage + cookie + IndexedDB. Never clobbers a better record. */
 
 const HUB = 'arka-arcade-progress-v1';
+const COOKIE = 'arka_arcade_v1';
 
 function read(key) {
   try {
@@ -16,13 +17,31 @@ function write(key, value) {
   } catch {}
 }
 
-export function hub() {
-  const data = read(HUB);
-  return data && typeof data === 'object' ? data : {};
+function cookieRead() {
+  try {
+    const m = document.cookie.match(/(?:^|; )arka_arcade_v1=([^;]*)/);
+    return m ? JSON.parse(decodeURIComponent(m[1])) : null;
+  } catch {
+    return null;
+  }
 }
 
-function saveHub(patch) {
-  write(HUB, { ...hub(), ...patch, updated: Date.now() });
+function cookieWrite(obj) {
+  try {
+    const raw = encodeURIComponent(JSON.stringify(obj));
+    if (raw.length > 3800) return;
+    document.cookie = `${COOKIE}=${raw};path=/;max-age=31536000;SameSite=Lax`;
+  } catch {}
+}
+
+function idbPut(obj) {
+  try {
+    const req = indexedDB.open('arka-arcade', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('progress');
+    req.onsuccess = () => {
+      req.result.transaction('progress', 'readwrite').objectStore('progress').put(obj, 'hub');
+    };
+  } catch {}
 }
 
 function addCleared(target, src) {
@@ -36,81 +55,152 @@ function addCleared(target, src) {
   }
 }
 
-export function loadTracks() {
-  const h = hub().tracks || {};
-  const legacy = read('thought-tracks-v14') || {};
-  const list = read('thought-tracks-cleared-v1') || [];
-  const records = { ...(legacy.records || {}), ...(h.records || {}) };
+function mergeRecords(a = {}, b = {}) {
+  const out = { ...a };
+  for (const [k, rec] of Object.entries(b || {})) {
+    const old = out[k] || {};
+    out[k] = {
+      home: Math.max(old.home || 0, rec.home || 0),
+      quota: rec.quota || old.quota || 0,
+      score: Math.max(old.score || 0, rec.score || 0),
+      cleared: !!(old.cleared || rec.cleared),
+    };
+  }
+  return out;
+}
+
+function mergeTracks(a = {}, b = {}) {
+  const records = mergeRecords(a.records, b.records);
   const cleared = {};
-  addCleared(cleared, legacy.cleared);
-  addCleared(cleared, h.cleared);
-  addCleared(cleared, list);
+  addCleared(cleared, a.cleared);
+  addCleared(cleared, b.cleared);
   for (const [k, rec] of Object.entries(records)) if (rec?.cleared) cleared[String(k)] = true;
   return {
-    best: Math.max(Number(h.best) || 0, Number(legacy.best) || 0),
-    muted: !!(h.muted ?? legacy.muted),
-    last: Math.max(1, Math.min(16, Number(h.last || legacy.last || legacy.level) || 1)),
-    rung: Number(h.rung || legacy.rung) || 0,
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    muted: !!(b.muted ?? a.muted),
+    last: b.last || a.last || 1,
+    rung: Math.max(Number(a.rung) || 0, Number(b.rung) || 0),
     records,
     cleared,
   };
 }
 
-export function saveTracks(data) {
-  const cleared = {};
-  addCleared(cleared, data.cleared);
-  const list = Object.keys(cleared).map(Number).filter(Boolean).sort((a, b) => a - b);
-  const payload = {
-    version: 17,
-    best: data.best || 0,
-    muted: !!data.muted,
-    unlocked: 16,
-    last: data.last || 1,
-    rung: data.rung || 0,
-    records: data.records || {},
-    cleared,
+function mergeCoffee(a = {}, b = {}) {
+  return {
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    stage: Math.max(Number(a.stage) || 0, Number(b.stage) || 0),
   };
+}
+
+function mergeSkyline(a = {}, b = {}) {
+  const sectors = [...new Set([...(a.sectors || []), ...(b.sectors || [])])].sort((x, y) => x - y);
+  const achievements = [...new Set([...(a.achievements || []), ...(b.achievements || [])])];
+  return {
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    unlocked: Math.max(Number(a.unlocked) || 0, Number(b.unlocked) || 0),
+    sectors,
+    achievements,
+    stats: b.stats || a.stats || null,
+  };
+}
+
+function mergeInfinite(a = {}, b = {}) {
+  return {
+    you: Math.max(Number(a.you) || 0, Number(b.you) || 0),
+    cpu: Math.max(Number(a.cpu) || 0, Number(b.cpu) || 0),
+  };
+}
+
+function mergeHub(a = {}, b = {}) {
+  return {
+    tracks: mergeTracks(a.tracks, b.tracks),
+    coffee: mergeCoffee(a.coffee, b.coffee),
+    skyline: mergeSkyline(a.skyline, b.skyline),
+    infinite: mergeInfinite(a.infinite, b.infinite),
+    last: b.last || a.last || null,
+    updated: Date.now(),
+  };
+}
+
+export function hub() {
+  const data = read(HUB);
+  const cookie = cookieRead();
+  return mergeHub(data && typeof data === 'object' ? data : {}, cookie && typeof cookie === 'object' ? cookie : {});
+}
+
+function saveHub(patch) {
+  const next = mergeHub(hub(), patch);
+  write(HUB, next);
+  cookieWrite(next);
+  idbPut(next);
+  try {
+    navigator.storage?.persist?.();
+  } catch {}
+  return next;
+}
+
+export function loadTracks() {
+  const h = hub().tracks || {};
+  const legacy = read('thought-tracks-v14') || {};
+  const list = read('thought-tracks-cleared-v1') || [];
+  const merged = mergeTracks(legacy, h);
+  addCleared(merged.cleared, list);
+  return merged;
+}
+
+export function saveTracks(data) {
+  const payload = mergeTracks(loadTracks(), data);
   saveHub({ tracks: payload });
   write('thought-tracks-v14', payload);
-  write('thought-tracks-cleared-v1', list);
+  write('thought-tracks-cleared-v1', Object.keys(payload.cleared).map(Number).filter(Boolean).sort((a, b) => a - b));
 }
 
 export function loadCoffee() {
   const h = hub().coffee || {};
-  const best = Math.max(Number(h.best) || 0, Number(localStorage.getItem('coffee-rush-best-v1')) || 0);
-  const stage = Math.max(Number(h.stage) || 0, Number(localStorage.getItem('coffee-rush-stage-v1')) || 0);
-  return { best, stage };
+  return mergeCoffee(h, {
+    best: Number(localStorage.getItem('coffee-rush-best-v1') || 0),
+    stage: Number(localStorage.getItem('coffee-rush-stage-v1') || 0),
+  });
 }
 
 export function saveCoffee(data) {
-  saveHub({ coffee: { best: data.best || 0, stage: data.stage || 0 } });
-  if (data.best != null) localStorage.setItem('coffee-rush-best-v1', String(data.best));
-  if (data.stage != null) localStorage.setItem('coffee-rush-stage-v1', String(data.stage));
+  const payload = mergeCoffee(loadCoffee(), data);
+  saveHub({ coffee: payload });
+  if (payload.best) localStorage.setItem('coffee-rush-best-v1', String(payload.best));
+  if (payload.stage) localStorage.setItem('coffee-rush-stage-v1', String(payload.stage));
 }
 
 export function loadSkyline() {
-  const stats = read('@skyline_signal_stats_v1') || hub().skyline || {};
-  const sectors = Array.isArray(stats.completedSectors) ? stats.completedSectors : [];
-  return {
+  const stats = read('@skyline_signal_stats_v1') || {};
+  const h = hub().skyline || {};
+  return mergeSkyline(h, {
     best: Number(stats.highScore) || 0,
-    sectors,
+    sectors: Array.isArray(stats.completedSectors) ? stats.completedSectors : [],
     unlocked: Number(stats.unlockedLevels) || 1,
-  };
+    achievements: stats.achievements || [],
+    stats,
+  });
+}
+
+export function saveSkyline(data) {
+  const payload = mergeSkyline(loadSkyline(), data);
+  saveHub({ skyline: payload });
+  if (payload.stats) write('@skyline_signal_stats_v1', payload.stats);
 }
 
 export function loadInfinite() {
   const h = hub().infinite || {};
   const legacy = read('arcade-infinite-v1') || {};
-  const you = Number(h.you ?? legacy.you ?? legacy.cpu?.you) || 0;
-  const cpu = Number(h.cpu ?? legacy.cpu ?? legacy.cpu?.cpu) || 0;
-  return { you, cpu };
+  return mergeInfinite(h, {
+    you: Number(legacy.you ?? legacy.cpu?.you) || 0,
+    cpu: Number(typeof legacy.cpu === 'number' ? legacy.cpu : legacy.cpu?.cpu) || 0,
+  });
 }
 
 export function saveInfinite(data) {
-  const you = data.you || 0;
-  const cpu = data.cpu || 0;
-  saveHub({ infinite: { you, cpu } });
-  write('arcade-infinite-v1', { you, cpu });
+  const payload = mergeInfinite(loadInfinite(), data);
+  saveHub({ infinite: payload });
+  write('arcade-infinite-v1', payload);
 }
 
 export function summary(id) {
