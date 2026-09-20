@@ -5,13 +5,13 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=24';
+} from './graph.js?v=25';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
 } from './switch.js?v=24';
-import { thumbnail, stageMeta } from './stages.js?v=15';
+import { thumbnail, stageMeta } from './stages.js?v=16';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -227,6 +227,19 @@ function shuffleBag(tokens, count) {
         run = bag[i] === bag[i - 1] ? run + 1 : 1;
         if (run > 2) bad = true;
       }
+      if (bad) continue;
+    }
+    if (tokens.length >= 4) {
+      const upper = new Set(tokens.slice(0, Math.ceil(tokens.length / 2)));
+      let run = 1;
+      let bad = false;
+      for (let i = 1; i < bag.length; i++) {
+        const same = upper.has(bag[i]) === upper.has(bag[i - 1]);
+        run = same ? run + 1 : 1;
+        if (run > 3) bad = true;
+      }
+      const head = bag.slice(0, Math.max(tokens.length, Math.ceil(bag.length / 3)));
+      if (!tokens.every((t) => head.includes(t))) bad = true;
       if (bad) continue;
     }
     return bag;
