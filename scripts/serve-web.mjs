@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadCatalog } from "./arcade-catalog.mjs";
+import { loadProgress, saveProgress, newPlayerId, playerFromCookie, playerCookie } from "./arcade-db.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARCADE = path.join(ROOT, "arcade");
@@ -57,9 +58,56 @@ function mapUrl(urlPath) {
   return { root: ARCADE, rel: urlPath.replace(/^\/+/, ""), spa: "index.html" };
 }
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
+function handleProgress(req, res, url) {
+  const cors = {
+    "Access-Control-Allow-Origin": req.headers.origin || "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+  };
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, cors);
+    return res.end();
+  }
+  let player = playerFromCookie(req.headers.cookie) || url.searchParams.get("player") || "";
+  if (!player) player = newPlayerId();
+  const headers = {
+    ...cors,
+    "Content-Type": "application/json; charset=utf-8",
+    "Set-Cookie": playerCookie(player),
+    "Cache-Control": "no-store",
+  };
+  const reply = (code, body) => {
+    res.writeHead(code, headers);
+    res.end(JSON.stringify(body));
+  };
+  if (req.method === "GET") {
+    return reply(200, { player, payload: loadProgress(player) });
+  }
+  if (req.method === "PUT" || req.method === "POST") {
+    return readBody(req).then((raw) => {
+      let incoming = {};
+      try { incoming = JSON.parse(raw || "{}"); } catch { incoming = {}; }
+      const payload = incoming.payload && typeof incoming.payload === "object" ? incoming.payload : incoming;
+      return reply(200, { player, payload: saveProgress(player, payload) });
+    }).catch(() => reply(400, { error: "bad json" }));
+  }
+  return reply(405, { error: "method" });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", "http://127.0.0.1");
   const urlPath = decodeURIComponent(url.pathname);
+  if (urlPath === "/api/progress") return handleProgress(req, res, url);
   const mapped = mapUrl(urlPath);
   if (mapped.file) {
     return fs.readFile(mapped.file, (err, data) => {

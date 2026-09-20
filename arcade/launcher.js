@@ -1,4 +1,4 @@
-import { summary } from "/progress.js?v=2";
+import { summary, pullServer } from "/progress.js?v=3";
 
 const LAST_KEY = "arka-arcade-last";
 
@@ -116,4 +116,5 @@ function paint(catalog) {
 
 const catalog = await fetch("/games.json").then((res) => res.json());
 paint(catalog);
+pullServer().then(() => paint(catalog));
 window.addEventListener("pageshow", () => paint(catalog));

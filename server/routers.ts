@@ -1,10 +1,17 @@
+import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import {
+  loadProgress,
+  saveProgress,
+  newPlayerId,
+  playerFromCookie,
+  playerCookie,
+} from "../scripts/arcade-db.mjs";
 
 export const appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -16,13 +23,23 @@ export const appRouter = router({
       } as const;
     }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  arcade: router({
+    getProgress: publicProcedure.query(({ ctx }) => {
+      let player = playerFromCookie(ctx.req.headers.cookie);
+      if (!player) player = newPlayerId();
+      ctx.res.setHeader("Set-Cookie", playerCookie(player));
+      return { player, payload: loadProgress(player) };
+    }),
+    saveProgress: publicProcedure
+      .input(z.any())
+      .mutation(({ ctx, input }) => {
+        let player = playerFromCookie(ctx.req.headers.cookie);
+        if (!player) player = newPlayerId();
+        ctx.res.setHeader("Set-Cookie", playerCookie(player));
+        const payload = input.payload && typeof input.payload === "object" ? input.payload : input;
+        return { player, payload: saveProgress(player, payload) };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

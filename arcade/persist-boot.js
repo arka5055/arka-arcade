@@ -144,6 +144,14 @@
     setCookie(next);
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
     try {
+      fetch('/api/progress', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: next }),
+      }).catch(function () {});
+    } catch (e) {}
+    try {
       var req = indexedDB.open('arka-arcade', 1);
       req.onupgradeneeded = function () { req.result.createObjectStore('progress'); };
       req.onsuccess = function () {
@@ -159,6 +167,16 @@
   addEventListener('pagehide', snapshot);
   addEventListener('visibilitychange', function () { if (document.hidden) snapshot(); });
   addEventListener('beforeunload', snapshot);
+
+  try {
+    fetch('/api/progress', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+      if (!data || !data.payload) return;
+      var merged = mergeHub(parse(lsGet(HUB)), data.payload);
+      applyHub(merged);
+      setCookie(merged);
+      snapshot();
+    }).catch(function () {});
+  } catch (e) {}
 
   try {
     var req = indexedDB.open('arka-arcade', 1);

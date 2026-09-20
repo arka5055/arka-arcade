@@ -136,7 +136,39 @@ function saveHub(patch) {
   try {
     navigator.storage?.persist?.();
   } catch {}
+  queueServerSync(next);
   return next;
+}
+
+let syncTimer = 0;
+function queueServerSync(payload) {
+  try {
+    clearTimeout(syncTimer);
+    syncTimer = window.setTimeout(() => {
+      fetch("/api/progress", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload }),
+      }).catch(() => {});
+    }, 200);
+  } catch {}
+}
+
+export async function pullServer() {
+  try {
+    const r = await fetch("/api/progress", { credentials: "include" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (data?.payload && typeof data.payload === "object") {
+      const next = mergeHub(hub(), data.payload);
+      write(HUB, next);
+      cookieWrite(next);
+      idbPut(next);
+      return next;
+    }
+  } catch {}
+  return null;
 }
 
 export function loadTracks() {

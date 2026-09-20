@@ -62,6 +62,32 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  app.get("/api/progress", async (req, res) => {
+    const { loadProgress, saveProgress, newPlayerId, playerFromCookie, playerCookie } = await import("../../scripts/arcade-db.mjs");
+    let player = playerFromCookie(req.headers.cookie) || "";
+    if (!player) player = newPlayerId();
+    res.setHeader("Set-Cookie", playerCookie(player));
+    res.json({ player, payload: loadProgress(player) });
+  });
+  app.put("/api/progress", async (req, res) => {
+    const { saveProgress, newPlayerId, playerFromCookie, playerCookie } = await import("../../scripts/arcade-db.mjs");
+    let player = playerFromCookie(req.headers.cookie) || "";
+    if (!player) player = newPlayerId();
+    res.setHeader("Set-Cookie", playerCookie(player));
+    const incoming = req.body && typeof req.body === "object" ? req.body : {};
+    const payload = incoming.payload && typeof incoming.payload === "object" ? incoming.payload : incoming;
+    res.json({ player, payload: saveProgress(player, payload) });
+  });
+  app.post("/api/progress", async (req, res) => {
+    const { saveProgress, newPlayerId, playerFromCookie, playerCookie } = await import("../../scripts/arcade-db.mjs");
+    let player = playerFromCookie(req.headers.cookie) || "";
+    if (!player) player = newPlayerId();
+    res.setHeader("Set-Cookie", playerCookie(player));
+    const incoming = req.body && typeof req.body === "object" ? req.body : {};
+    const payload = incoming.payload && typeof incoming.payload === "object" ? incoming.payload : incoming;
+    res.json({ player, payload: saveProgress(player, payload) });
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({

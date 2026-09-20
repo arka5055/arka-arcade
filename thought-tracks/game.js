@@ -1,5 +1,5 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
-import { loadTracks, saveTracks } from '/progress.js?v=2';
+import { loadTracks, saveTracks, pullServer } from '/progress.js?v=3';
 import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
@@ -49,6 +49,17 @@ try {
   savedRung = save.rung || 0;
   cleared = save.cleared || {};
 } catch {}
+
+pullServer().then((next) => {
+  if (!next?.tracks) return;
+  const save = loadTracks();
+  best = save.best || best;
+  lastPlayed = save.last || lastPlayed;
+  records = save.records || records;
+  cleared = save.cleared || cleared;
+  savedRung = save.rung || savedRung;
+  persist();
+});
 
 function isCleared(level) {
   const k = String(level);
