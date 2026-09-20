@@ -185,6 +185,42 @@ function addEdge(edges, a, aPort, b, bPort) {
     pts: routePorts(a, aPort, b, bPort), forward: { fromNodeId: a.id, toNodeId: b.id },
   });
 }
+function addCurve(edges, a, aPort, b, bPort) {
+  const id = `${a.id}->${b.id}:${aPort}`;
+  a.ports[aPort] = id;
+  b.ports[bPort] = id;
+  edges.push({
+    id, from: { nodeId: a.id, port: aPort }, to: { nodeId: b.id, port: bPort },
+    pts: curvePorts(a, aPort, b, bPort), forward: { fromNodeId: a.id, toNodeId: b.id },
+  });
+}
+function curvePorts(a, aPort, b, bPort) {
+  const p0 = portPoint(a, aPort);
+  const p3 = portPoint(b, bPort);
+  const da = DIR[aPort];
+  const db = DIR[bPort];
+  const dist = hypot(p0, p3);
+  const L = Math.max(40, Math.min(96, dist * 0.45));
+  const p1 = { x: p0.x + da[0] * L, y: p0.y + da[1] * L };
+  const p2 = { x: p3.x + db[0] * L, y: p3.y + db[1] * L };
+  const steps = Math.max(18, Math.round(dist / 7));
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const u = 1 - t;
+    pts.push({
+      x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+      y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y,
+    });
+  }
+  return pts;
+}
+function atPct(region, px, py) {
+  return {
+    x: region.x0 + (px / 100) * (region.x1 - region.x0),
+    y: region.y0 + (py / 100) * (region.y1 - region.y0),
+  };
+}
 function stationOnFarEdge(region, inDir, color) {
   const pad = 22;
   let x, y;
@@ -276,22 +312,28 @@ function layoutThree(nodes, edges, tokens, region) {
 }
 function layoutFour(nodes, edges, tokens, region) {
   const [pink, black, green, yellow] = tokens;
-  const cx = 168;
-  const j1 = mkSw('J:', '', cx, 428, 'W', 'N', 'S');
-  const j2 = mkSw('J:0', '0', cx, 248, 'S', 'N', 'E');
-  const j3 = mkSw('J:1', '1', cx, 608, 'N', 'S', 'E');
-  const stP = { id: `ST:${pink}`, kind: 'station', color: pink, x: cx, y: region.y0 + 28, port: 'S', pulse: 0, ports: {} };
-  const stK = { id: `ST:${black}`, kind: 'station', color: black, x: region.x1 - 22, y: j2.y, port: 'W', pulse: 0, ports: {} };
-  const stG = { id: `ST:${green}`, kind: 'station', color: green, x: cx, y: region.y1 - 24, port: 'N', pulse: 0, ports: {} };
-  const stY = { id: `ST:${yellow}`, kind: 'station', color: yellow, x: region.x1 - 22, y: j3.y, port: 'W', pulse: 0, ports: {} };
+  const j1p = atPct(region, 31, 50);
+  const j2p = atPct(region, 65, 35);
+  const j3p = atPct(region, 65, 65);
+  const j1 = mkSw('J:', '', j1p.x, j1p.y, 'W', 'NE', 'SE');
+  const j2 = mkSw('J:0', '0', j2p.x, j2p.y, 'SW', 'NW', 'NE');
+  const j3 = mkSw('J:1', '1', j3p.x, j3p.y, 'NW', 'SW', 'SE');
+  j1.sourceAt = atPct(region, 8, 50);
+  const st = (color, x, y, port) => ({
+    id: `ST:${color}`, kind: 'station', color, ...atPct(region, x, y), port, pulse: 0, ports: {},
+  });
+  const stP = st(pink, 46, 14, 'SE');
+  const stK = st(black, 89, 14, 'SW');
+  const stG = st(green, 46, 86, 'NE');
+  const stY = st(yellow, 89, 86, 'NW');
   nodes[j1.id] = j1; nodes[j2.id] = j2; nodes[j3.id] = j3;
   nodes[stP.id] = stP; nodes[stK.id] = stK; nodes[stG.id] = stG; nodes[stY.id] = stY;
-  addEdge(edges, j1, 'N', j2, 'S');
-  addEdge(edges, j1, 'S', j3, 'N');
-  addEdge(edges, j2, 'N', stP, 'S');
-  addEdge(edges, j2, 'E', stK, 'W');
-  addEdge(edges, j3, 'S', stG, 'N');
-  addEdge(edges, j3, 'E', stY, 'W');
+  addCurve(edges, j1, 'NE', j2, 'SW');
+  addCurve(edges, j1, 'SE', j3, 'NW');
+  addCurve(edges, j2, 'NW', stP, 'SE');
+  addCurve(edges, j2, 'NE', stK, 'SW');
+  addCurve(edges, j3, 'SW', stG, 'NE');
+  addCurve(edges, j3, 'SE', stY, 'NW');
   return j1;
 }
 function playRegion() { return { x0: 28, y0: 132, x1: 362, y1: 708 }; }
@@ -309,8 +351,8 @@ export function buildStage(level, rung = 0) {
         : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
-    x: root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120,
-    y: root.inPort === 'W' ? root.y : root.y + DIR[root.inPort][1] * 120,
+    x: root.sourceAt?.x ?? (root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120),
+    y: root.sourceAt?.y ?? (root.inPort === 'W' ? root.y : root.y + DIR[root.inPort][1] * 120),
     port: opposite(root.inPort),
     ports: {},
   };
@@ -465,6 +507,35 @@ export function validateStage(graph) {
     }
   }
   for (const sw of switches) errors.push(...assertSwitchGeometry(sw, graph.edges));
+  if (graph.spec?.n === 4) {
+    if (graph.edges.length !== 7) errors.push(`four-station edges ${graph.edges.length} != 7`);
+    if (stations.length !== 4) errors.push('four-station: station count');
+    if (switches.length !== 3) errors.push('four-station: switch count');
+    const j2 = byId['J:0'];
+    const j3 = byId['J:1'];
+    if (j2 && j3) {
+      const sep = hypot(j2, j3);
+      const need = 2.5 * 2 * HUB_R;
+      if (sep < need) errors.push(`J2-J3 separation ${sep | 0} < ${need | 0}`);
+    }
+    if (graph.edges.some((e) => (e.from.nodeId === 'J:0' && e.to.nodeId === 'J:1') || (e.from.nodeId === 'J:1' && e.to.nodeId === 'J:0'))) {
+      errors.push('illegal J2-J3 edge');
+    }
+    const expect = { P: ['J:', 'J:0', 'ST:P'], K: ['J:', 'J:0', 'ST:K'], G: ['J:', 'J:1', 'ST:G'], Y: ['J:', 'J:1', 'ST:Y'] };
+    for (const [color, path] of Object.entries(expect)) {
+      const bits = graph.codes[color];
+      let node = graph.root;
+      const got = [node.id];
+      for (const bit of bits) {
+        const port = bit === '1' ? node.out1 : node.out0;
+        const edge = graph.edges.find((e) => e.from.nodeId === node.id && e.from.port === port);
+        if (!edge) { errors.push(`${color}: missing ${port} from ${node.id}`); break; }
+        node = byId[edge.to.nodeId];
+        got.push(node.id);
+      }
+      if (got.join() !== path.join()) errors.push(`${color} path ${got.join('>')} != ${path.join('>')}`);
+    }
+  }
   return { ok: errors.length === 0, errors };
 }
 export function liveEdge(switchNode, edge) {
