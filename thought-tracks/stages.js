@@ -1,4 +1,4 @@
-import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=28';
+import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=29';
 import { strokeCenterline, drawHub, drawBlade, trimRailToHubs } from './switch.js?v=26';
 
 const thumbs = new Map();
@@ -35,10 +35,21 @@ export function paintThumbnail(canvas, graph) {
   for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(graph.nodes)) {
     if (n.kind === 'station') {
+      const parts = tokenParts(n.color);
       ctx.beginPath();
       ctx.arc(n.x, n.y, 18, 0, Math.PI * 2);
-      ctx.fillStyle = PALETTE[tokenParts(n.color)[0]] || '#eef3e4';
-      ctx.fill();
+      if (parts.length === 2) {
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = PALETTE[parts[0]] || '#eef3e4';
+        ctx.fillRect(n.x - 18, n.y - 18, 18, 36);
+        ctx.fillStyle = PALETTE[parts[1]] || '#1c1c1c';
+        ctx.fillRect(n.x, n.y - 18, 18, 36);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = PALETTE[parts[0]] || '#eef3e4';
+        ctx.fill();
+      }
       ctx.strokeStyle = 'rgba(28,40,24,0.35)';
       ctx.lineWidth = 3;
       ctx.stroke();

@@ -49,7 +49,7 @@ const LEVELS = [
   { id: 5, n: 5, shape: 'mixed', cap: 3, conc: 2.6, pool: 22, time: 74, miss: 3, pressure: 2, intro: 'Prioritize the nearest switch, not the newest train.' },
   { id: 6, n: 6, shape: 'balanced', cap: 5, conc: 5.0, pool: 28, time: 84, miss: 3, pressure: 3, intro: 'Several trains may be on the rails at once.' },
   { id: 7, n: 7, shape: 'three', cap: 6, conc: 4.2, pool: 34, time: 94, miss: 3, pressure: 3, intro: 'Scan the whole board. Downstream switches stay set.' },
-  { id: 8, n: 8, shape: 'balanced', cap: 5, conc: 4.0, pool: 42, time: 104, miss: 3, pressure: 3, intro: 'NEW: Two-color trains must match two-color stations.' },
+  { id: 8, n: 8, shape: 'balanced', cap: 7, conc: 5.2, pool: 42, time: 102, miss: 3, pressure: 4, intro: 'NEW: Two-color trains go to the two-color station.' },
   { id: 9, n: 9, shape: 'mixed', cap: 5, conc: 4.4, pool: 48, time: 108, miss: 3, pressure: 3, intro: 'Two switches can need a tap at almost the same time.' },
   { id: 10, n: 10, shape: 'long', cap: 6, conc: 4.8, pool: 56, time: 114, miss: 3, pressure: 3, intro: 'The first switch may serve two trains in a row.' },
   { id: 11, n: 11, shape: 'mixed', cap: 6, conc: 5.1, pool: 64, time: 120, miss: 2, pressure: 3, intro: 'At most 2 misses this round.' },
@@ -71,7 +71,9 @@ export function stageFor(level, rung = 0) {
     conc = 6.0 + rung * 0.15;
   }
   const gap = row.time / pool;
-  const bits = row.n === 7
+  const bits = row.n === 8
+    ? ['000', '0010', '01', '10', '110', '1110', '1111', '0011']
+    : row.n === 7
     ? ['000', '001', '01', '10', '110', '1110', '1111']
     : row.n === 6
     ? ['00', '010', '011', '10', '110', '111']
@@ -164,13 +166,10 @@ function axis(port) {
 function routePorts(a, aPort, b, bPort) {
   const p0 = portPoint(a, aPort);
   const p1 = portPoint(b, bPort);
-  if ((aPort === 'E' && bPort === 'W' || aPort === 'W' && bPort === 'E') && Math.abs(p0.y - p1.y) < 6) {
-    return [{ ...p0 }, { x: p1.x, y: p0.y }];
-  }
-  if ((aPort === 'N' && bPort === 'S' || aPort === 'S' && bPort === 'N') && Math.abs(p0.x - p1.x) < 6) {
-    return [{ ...p0 }, { x: p0.x, y: p1.y }];
-  }
-  const stub = 28;
+  const oppH = (aPort === 'E' && bPort === 'W') || (aPort === 'W' && bPort === 'E');
+  const oppV = (aPort === 'N' && bPort === 'S') || (aPort === 'S' && bPort === 'N');
+  if (oppH || oppV) return lerpPts(p0, p1);
+  const stub = 22;
   const a1 = { x: p0.x + DIR[aPort][0] * stub, y: p0.y + DIR[aPort][1] * stub };
   const b1 = { x: p1.x + DIR[bPort][0] * stub, y: p1.y + DIR[bPort][1] * stub };
   const pts = [{ ...p0 }, a1];
@@ -183,6 +182,16 @@ function routePorts(a, aPort, b, bPort) {
   }
   pts.push({ ...p1 });
   return densify(simplify(pts), 16);
+}
+function lerpPts(a, b) {
+  const dist = hypot(a, b);
+  const n = Math.max(2, Math.round(dist / 14));
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    pts.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  }
+  return pts;
 }
 function addEdge(edges, a, aPort, b, bPort) {
   const id = `${a.id}->${b.id}:${aPort}`;
@@ -205,13 +214,16 @@ function addCurve(edges, a, aPort, b, bPort) {
 function curvePorts(a, aPort, b, bPort) {
   const p0 = portPoint(a, aPort);
   const p3 = portPoint(b, bPort);
+  const oppH = (aPort === 'E' && bPort === 'W') || (aPort === 'W' && bPort === 'E');
+  const oppV = (aPort === 'N' && bPort === 'S') || (aPort === 'S' && bPort === 'N');
+  if (oppH || oppV) return lerpPts(p0, p3);
   const da = DIR[aPort];
   const db = DIR[bPort];
   const dist = hypot(p0, p3);
-  const L = Math.max(40, Math.min(96, dist * 0.45));
+  const L = Math.max(16, Math.min(40, dist * 0.26));
   const p1 = { x: p0.x + da[0] * L, y: p0.y + da[1] * L };
   const p2 = { x: p3.x + db[0] * L, y: p3.y + db[1] * L };
-  const steps = Math.max(18, Math.round(dist / 7));
+  const steps = Math.max(14, Math.round(dist / 8));
   const pts = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -427,25 +439,64 @@ function layoutSeven(nodes, edges, tokens, region) {
     id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
   });
   const stP = st(pink, 74, 8, 'S');
-  const stK = st(black, 86, 18, 'W');
-  const stG = st(green, 86, 38, 'W');
-  const stY = st(yellow, 82, 56, 'W');
-  const stB = st(blue, 86, 74, 'W');
-  const stV = st(violet, 48, 90, 'E');
-  const stW = st(white, 86, 90, 'W');
+  const stK = st(black, 86, 16, 'W');
+  const stG = st(green, 86, 28, 'W');
+  const stY = st(yellow, 82, 64, 'W');
+  const stB = st(blue, 86, 76, 'W');
+  const stV = st(violet, 48, 91, 'E');
+  const stW = st(white, 86, 91, 'W');
   for (const n of [j1, j2, j3, j4, j5, j6, stP, stK, stG, stY, stB, stV, stW]) nodes[n.id] = n;
   addCurve(edges, j1, 'NE', j2, 'SW');
   addCurve(edges, j1, 'SE', j3, 'NW');
   addCurve(edges, j2, 'N', j4, 'SW');
-  addCurve(edges, j2, 'E', stG, 'W');
-  addCurve(edges, j4, 'N', stP, 'S');
-  addCurve(edges, j4, 'E', stK, 'W');
-  addCurve(edges, j3, 'E', stY, 'W');
+  addEdge(edges, j2, 'E', stG, 'W');
+  addEdge(edges, j4, 'N', stP, 'S');
+  addEdge(edges, j4, 'E', stK, 'W');
+  addEdge(edges, j3, 'E', stY, 'W');
   addCurve(edges, j3, 'SE', j5, 'NW');
-  addCurve(edges, j5, 'E', stB, 'W');
-  addCurve(edges, j5, 'S', j6, 'N');
-  addCurve(edges, j6, 'W', stV, 'E');
-  addCurve(edges, j6, 'E', stW, 'W');
+  addEdge(edges, j5, 'E', stB, 'W');
+  addEdge(edges, j5, 'S', j6, 'N');
+  addEdge(edges, j6, 'W', stV, 'E');
+  addEdge(edges, j6, 'E', stW, 'W');
+  return j1;
+}
+function layoutEight(nodes, edges, tokens, region) {
+  const [pink, black, green, yellow, blue, violet, white, dual] = tokens;
+  const p = (x, y) => atPct(region, x, y);
+  const j1 = mkSw('J:', '', ...xy(p(46, 50)), 'W', 'NE', 'SE');
+  const j2 = mkSw('J:0', '0', ...xy(p(58, 26)), 'SW', 'N', 'E');
+  const j4 = mkSw('J:00', '00', ...xy(p(70, 12)), 'SW', 'N', 'E');
+  const jK = mkSw('J:001', '001', ...xy(p(82, 18)), 'W', 'N', 'E');
+  const j3 = mkSw('J:1', '1', ...xy(p(60, 64)), 'NW', 'E', 'SE');
+  const j5 = mkSw('J:11', '11', ...xy(p(76, 76)), 'NW', 'E', 'S');
+  const j6 = mkSw('J:111', '111', ...xy(p(76, 91)), 'N', 'W', 'E');
+  j1.sourceAt = p(5, 50);
+  const st = (color, x, y, port) => ({
+    id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
+  });
+  const stP = st(pink, 70, 8, 'S');
+  const stK = st(black, 82, 6, 'S');
+  const stGK = st(dual, 86, 18, 'W');
+  const stG = st(green, 78, 36, 'W');
+  const stY = st(yellow, 82, 64, 'W');
+  const stB = st(blue, 86, 76, 'W');
+  const stV = st(violet, 48, 91, 'E');
+  const stW = st(white, 86, 91, 'W');
+  for (const n of [j1, j2, j3, j4, jK, j5, j6, stP, stK, stGK, stG, stY, stB, stV, stW]) nodes[n.id] = n;
+  addCurve(edges, j1, 'NE', j2, 'SW');
+  addCurve(edges, j1, 'SE', j3, 'NW');
+  addCurve(edges, j2, 'N', j4, 'SW');
+  addEdge(edges, j2, 'E', stG, 'W');
+  addEdge(edges, j4, 'N', stP, 'S');
+  addEdge(edges, j4, 'E', jK, 'W');
+  addEdge(edges, jK, 'N', stK, 'S');
+  addEdge(edges, jK, 'E', stGK, 'W');
+  addEdge(edges, j3, 'E', stY, 'W');
+  addCurve(edges, j3, 'SE', j5, 'NW');
+  addEdge(edges, j5, 'E', stB, 'W');
+  addEdge(edges, j5, 'S', j6, 'N');
+  addEdge(edges, j6, 'W', stV, 'E');
+  addEdge(edges, j6, 'E', stW, 'W');
   return j1;
 }
 function xy(pt) { return [pt.x, pt.y]; }
@@ -465,7 +516,9 @@ export function buildStage(level, rung = 0) {
           ? layoutSix(nodes, edges, spec.tokens, region)
           : spec.n === 7
             ? layoutSeven(nodes, edges, spec.tokens, region)
-            : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
+            : spec.n === 8
+              ? layoutEight(nodes, edges, spec.tokens, region)
+              : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
     x: root.sourceAt?.x ?? (root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120),
@@ -747,6 +800,34 @@ export function validateStage(graph) {
     const expect = {
       P: ['J:', 'J:0', 'J:00', 'ST:P'],
       K: ['J:', 'J:0', 'J:00', 'ST:K'],
+      G: ['J:', 'J:0', 'ST:G'],
+      Y: ['J:', 'J:1', 'ST:Y'],
+      B: ['J:', 'J:1', 'J:11', 'ST:B'],
+      V: ['J:', 'J:1', 'J:11', 'J:111', 'ST:V'],
+      W: ['J:', 'J:1', 'J:11', 'J:111', 'ST:W'],
+    };
+    for (const [color, path] of Object.entries(expect)) {
+      const bits = graph.codes[color];
+      let node = graph.root;
+      const got = [node.id];
+      for (const bit of bits) {
+        const port = bit === '1' ? node.out1 : node.out0;
+        const edge = graph.edges.find((e) => e.from.nodeId === node.id && e.from.port === port);
+        if (!edge) { errors.push(`${color}: missing ${port} from ${node.id}`); break; }
+        node = byId[edge.to.nodeId];
+        got.push(node.id);
+      }
+      if (got.join() !== path.join()) errors.push(`${color} path ${got.join('>')} != ${path.join('>')}`);
+    }
+  }
+  if (graph.spec?.n === 8) {
+    if (graph.edges.length !== 15) errors.push(`eight-station edges ${graph.edges.length} != 15`);
+    if (stations.length !== 8) errors.push('eight-station: station count');
+    if (switches.length !== 7) errors.push('eight-station: switch count');
+    const expect = {
+      P: ['J:', 'J:0', 'J:00', 'ST:P'],
+      K: ['J:', 'J:0', 'J:00', 'J:001', 'ST:K'],
+      GK: ['J:', 'J:0', 'J:00', 'J:001', 'ST:GK'],
       G: ['J:', 'J:0', 'ST:G'],
       Y: ['J:', 'J:1', 'ST:Y'],
       B: ['J:', 'J:1', 'J:11', 'ST:B'],

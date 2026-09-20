@@ -5,13 +5,13 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=28';
+} from './graph.js?v=29';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
 } from './switch.js?v=26';
-import { thumbnail, stageMeta } from './stages.js?v=16';
+import { thumbnail, stageMeta } from './stages.js?v=17';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -184,11 +184,15 @@ function paintToken(ctx, token, drawPath) {
   drawPath();
   ctx.clip();
   ctx.fillStyle = PALETTE[parts[0]] || '#3d8f44';
-  ctx.fillRect(-22, -24, 22, 44);
+  ctx.fillRect(-40, -40, 40, 80);
   ctx.fillStyle = PALETTE[parts[1]] || '#1c1c1c';
-  ctx.fillRect(0, -24, 22, 44);
+  ctx.fillRect(0, -40, 40, 80);
   ctx.restore();
   drawPath();
+}
+
+function inkOn(part) {
+  return part === 'K' || part === 'V' || part === 'B' ? '#f7f4ea' : '#1c2818';
 }
 
 function switchCommitted(sw) {
@@ -534,7 +538,7 @@ function startLevel(level, rung = state.rung) {
     graph,
     trains: [],
     fx: [],
-    hint: spec.intro && level < 6 ? (level === 1 ? 99 : 1.8) : 0,
+    hint: spec.intro && (level === 1 ? 99 : (level < 6 || level === 8) ? 2.2 : 0),
     intro: spec.intro || '',
     flash: 0,
     home: 0,
@@ -717,6 +721,8 @@ function drawInner(sw) {
 
 function drawStation(st) {
   const off = houseOffset(st.port);
+  const parts = tokenParts(st.color);
+  const dual = parts.length === 2;
   ctx.save();
   ctx.strokeStyle = '#e7ead8';
   ctx.lineWidth = 10;
@@ -737,32 +743,42 @@ function drawStation(st) {
   ctx.stroke();
   ctx.translate(st.x + off.x, st.y + off.y);
   if (st.pulse > 0) {
-    ctx.shadowColor = PALETTE[tokenParts(st.color)[0]] || '#eef3e4';
+    ctx.shadowColor = PALETTE[parts[0]] || '#eef3e4';
     ctx.shadowBlur = 16;
   }
   ctx.lineJoin = 'round';
   ctx.lineWidth = 2.8;
   ctx.strokeStyle = '#f3f6ee';
-  paintToken(ctx, st.color, () => roundRect(-15, -9, 30, 22, 4));
+  const bw = dual ? 40 : 30;
+  const bh = dual ? 26 : 22;
+  paintToken(ctx, st.color, () => roundRect(-bw / 2, dual ? -11 : -9, bw, bh, 5));
   ctx.stroke();
   paintToken(ctx, st.color, () => {
     ctx.beginPath();
-    ctx.moveTo(-17, -7);
-    ctx.lineTo(0, -20);
-    ctx.lineTo(17, -7);
+    ctx.moveTo(-bw / 2 - 2, dual ? -9 : -7);
+    ctx.lineTo(0, dual ? -24 : -20);
+    ctx.lineTo(bw / 2 + 2, dual ? -9 : -7);
     ctx.closePath();
   });
   ctx.stroke();
   ctx.shadowBlur = 0;
-  ctx.fillStyle = '#f7f4ea';
-  ctx.beginPath();
-  ctx.arc(0, 4, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#1c2818';
-  ctx.font = '800 10px Trebuchet MS, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(tokenLabel(st.color), 0, 4);
+  if (dual) {
+    ctx.fillStyle = inkOn(parts[0]);
+    ctx.font = '800 11px Trebuchet MS, sans-serif';
+    ctx.fillText(parts[0], -10, 4);
+    ctx.fillStyle = inkOn(parts[1]);
+    ctx.fillText(parts[1], 10, 4);
+  } else {
+    ctx.fillStyle = '#f7f4ea';
+    ctx.beginPath();
+    ctx.arc(0, 4, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1c2818';
+    ctx.font = '800 10px Trebuchet MS, sans-serif';
+    ctx.fillText(tokenLabel(st.color), 0, 4);
+  }
   ctx.restore();
 }
 
@@ -816,7 +832,9 @@ function drawLoco(tr) {
     ctx.strokeStyle = '#f3f6ee';
     ctx.lineWidth = 2.6;
     if (i === 0) {
-      paintToken(ctx, tr.color, () => roundRect(-13, -7, 24, 14, 3));
+      const parts = tokenParts(tr.color);
+      const dual = parts.length === 2;
+      paintToken(ctx, tr.color, () => roundRect(dual ? -15 : -13, -7, dual ? 28 : 24, 14, 3));
       ctx.stroke();
       paintToken(ctx, tr.color, () => roundRect(4, -14, 7, 8, 2));
       ctx.stroke();
@@ -826,15 +844,22 @@ function drawLoco(tr) {
       ctx.arc(-7, 8, 2.6, 0, Math.PI * 2);
       ctx.arc(3, 8, 2.6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#f7f4ea';
-      ctx.beginPath();
-      ctx.arc(-1, 0, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#1c2818';
       ctx.font = '800 8px Trebuchet MS, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(tokenLabel(tr.color), -1, 0);
+      if (dual) {
+        ctx.fillStyle = inkOn(parts[0]);
+        ctx.fillText(parts[0], -7, 0);
+        ctx.fillStyle = inkOn(parts[1]);
+        ctx.fillText(parts[1], 6, 0);
+      } else {
+        ctx.fillStyle = '#f7f4ea';
+        ctx.beginPath();
+        ctx.arc(-1, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1c2818';
+        ctx.fillText(tokenLabel(tr.color), -1, 0);
+      }
     } else {
       roundRect(-9, -6, 16, 12, 3);
       ctx.fill(); ctx.stroke();
