@@ -3,7 +3,7 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS,
-} from './graph.js?v=5';
+} from './graph.js?v=6';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -767,6 +767,7 @@ document.getElementById('btn-pause').addEventListener('click', () => {
 document.getElementById('btn-resume').addEventListener('click', () => {
   ui.pause.classList.add('hidden');
   if (state.mode === 'pause') state.mode = 'play';
+  last = performance.now();
 });
 document.getElementById('btn-mute').addEventListener('click', () => {
   muted = !muted;
@@ -775,13 +776,16 @@ document.getElementById('btn-mute').addEventListener('click', () => {
 });
 
 addEventListener('resize', resize);
+function pauseForLeave() {
+  if (state.mode !== 'play') return;
+  state.mode = 'pause';
+  ui.pause.classList.remove('hidden');
+}
 addEventListener('visibilitychange', () => {
-  if (document.hidden && state.mode === 'play') {
-    state.mode = 'pause';
-    ui.pause.classList.remove('hidden');
-  }
+  if (document.hidden) pauseForLeave();
   if (!document.hidden && audioCtx?.state === 'suspended') audioCtx.resume();
 });
+addEventListener('pagehide', pauseForLeave);
 
 resize();
 refreshHud();

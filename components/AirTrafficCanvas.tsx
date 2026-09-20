@@ -2072,9 +2072,11 @@ export const AirTrafficCanvas: React.FC<AirTrafficCanvasProps> = ({
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('blur', pauseForInterruption);
+    window.addEventListener('pagehide', pauseForInterruption);
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('blur', pauseForInterruption);
+      window.removeEventListener('pagehide', pauseForInterruption);
     };
   }, [cancelRouteEdit, onAutoPause]);
 

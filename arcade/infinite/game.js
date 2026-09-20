@@ -232,11 +232,18 @@ function showDone() {
   tone(state.winner === HUMAN ? 523 : 196, 0.22, "triangle", 0.06);
 }
 
+let cpuTimer = 0;
+
 function maybeCpu() {
   if (state.turn !== AI || state.winner) return;
   locked = true;
   render();
-  window.setTimeout(() => {
+  const think = () => {
+    cpuTimer = 0;
+    if (document.hidden) {
+      cpuTimer = window.setTimeout(think, 280);
+      return;
+    }
     const cell = cpuMove(state);
     const next = applyMove(state, cell);
     if (next) {
@@ -250,7 +257,8 @@ function maybeCpu() {
       persist();
       showDone();
     }
-  }, 280);
+  };
+  cpuTimer = window.setTimeout(think, 280);
 }
 
 function play(cell) {
@@ -272,6 +280,8 @@ function play(cell) {
 function start() {
   state = emptyState();
   locked = false;
+  if (cpuTimer) window.clearTimeout(cpuTimer);
+  cpuTimer = 0;
   doneEl.classList.add("hidden");
   render();
 }
