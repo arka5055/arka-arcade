@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#071c1b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Math Drop">
+  <title>Math Drop</title>
+  <meta name="description" content="Solve falling equations before they hit the water.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/drops/apple-touch-icon.svg">
+  <link rel="manifest" href="/drops/manifest.json">
+  <link rel="stylesheet" href="/drops/styles.css?v=4">
+  <link rel="stylesheet" href="/arcade-home.css?v=2">
+  <script src="/persist-boot.js?v=3"></script>
+</head>
+<body>
+  <a class="arcade-home" href="/">ALL GAMES</a>
+
+  <canvas id="game" width="390" height="640" aria-label="Falling math drops"></canvas>
+
+  <header class="hud">
+    <p class="kicker">ARKA</p>
+    <div class="chip"><b>LEVEL</b><span id="hud-level">1</span></div>
+    <div class="chip"><b>SCORE</b><span id="hud-score">0</span></div>
+    <div class="chip"><b>WAVE</b><span id="hud-goal">0/8</span></div>
+    <div class="lives" id="hud-lives" aria-label="Lives">
+      <i></i><i></i><i></i>
+    </div>
+  </header>
+
+  <div class="dock">
+    <div class="entry-row">
+      <button type="button" id="btn-new">NEW</button>
+      <div class="entry" id="entry">—</div>
+      <button type="button" id="btn-pause">PAUSE</button>
+    </div>
+    <div class="keys" id="keys"></div>
+  </div>
+
+  <div class="overlay hidden" id="pause">
+    <div class="card">
+      <p class="kicker">ARKA</p>
+      <h1>Paused</h1>
+      <p class="lede">Drops wait. Resume when you are ready.</p>
+      <button class="play" id="btn-resume">RESUME</button>
+      <button class="ghost" id="btn-pause-new">NEW GAME</button>
+      <a class="ghost" href="/">ALL GAMES</a>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="done">
+    <div class="card">
+      <p class="kicker">ARKA</p>
+      <h1 id="done-title">Pond overflow</h1>
+      <p class="lede" id="done-copy">Three drops reached the water.</p>
+      <p class="stat" id="done-score">0</p>
+      <button class="play" id="btn-again">PLAY AGAIN</button>
+      <a class="ghost" href="/">ALL GAMES</a>
+    </div>
+  </div>
+
+  <script type="module" src="/drops/game.js?v=4"></script>
+</body>
+</html>

@@ -10,6 +10,7 @@ One studio. One repo. One launcher.
 | Coffee Rush | `/coffee/` |
 | Skyline Signal | `/skyline/` |
 | Thought Tracks | `/tracks/` |
+| Math Drop | `/drops/` |
 | Infinite Tic Tac Toe | `/infinite/` |
 
 To add a game, see [arcade/README.md](arcade/README.md). The catalog is [arcade/games.json](arcade/games.json).

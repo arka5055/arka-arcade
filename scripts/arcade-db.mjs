@@ -56,12 +56,21 @@ function mergeInfinite(a = {}, b = {}) {
   };
 }
 
+function mergeDrops(a = {}, b = {}) {
+  return {
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    last: Math.max(Number(a.last) || 0, Number(b.last) || 0),
+    level: Math.max(Number(a.level) || 0, Number(b.level) || 0),
+  };
+}
+
 export function mergeHub(a = {}, b = {}) {
   return {
     tracks: mergeTracks(a.tracks, b.tracks),
     coffee: mergeCoffee(a.coffee, b.coffee),
     skyline: mergeSkyline(a.skyline, b.skyline),
     infinite: mergeInfinite(a.infinite, b.infinite),
+    drops: mergeDrops(a.drops, b.drops),
     last: b.last || a.last || null,
     updated: Date.now(),
   };

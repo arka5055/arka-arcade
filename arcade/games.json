@@ -37,6 +37,17 @@
       "score": { "key": "thought-tracks-v14", "kind": "json", "field": "best", "label": "Best" }
     },
     {
+      "id": "drops",
+      "title": "Math Drop",
+      "kind": "Mental math",
+      "blurb": "Solve falling equations before they hit the water. Shared answers pop together.",
+      "path": "/drops/",
+      "root": "arcade/drops",
+      "cover": "/media/drops.jpg",
+      "tone": "#071c1b",
+      "score": { "key": "arcade-drops-v1", "kind": "json", "field": "best", "label": "Best" }
+    },
+    {
       "id": "infinite",
       "title": "Infinite Tic Tac Toe",
       "kind": "Vanishing marks",

@@ -69,6 +69,14 @@
     a = a || {}; b = b || {};
     return { you: Math.max(a.you || 0, b.you || 0), cpu: Math.max(a.cpu || 0, b.cpu || 0) };
   }
+  function mergeDrops(a, b) {
+    a = a || {}; b = b || {};
+    return {
+      best: Math.max(a.best || 0, b.best || 0),
+      last: Math.max(a.last || 0, b.last || 0),
+      level: Math.max(a.level || 0, b.level || 0),
+    };
+  }
   function mergeHub(a, b) {
     a = a && typeof a === 'object' ? a : {};
     b = b && typeof b === 'object' ? b : {};
@@ -77,6 +85,7 @@
       coffee: mergeCoffee(a.coffee, b.coffee),
       skyline: mergeSkyline(a.skyline, b.skyline),
       infinite: mergeInfinite(a.infinite, b.infinite),
+      drops: mergeDrops(a.drops, b.drops),
       last: b.last || a.last || null,
       updated: Date.now(),
     };
@@ -97,6 +106,8 @@
     if (best || stage) hub.coffee = { best: best, stage: stage };
     var inf = parse(lsGet('arcade-infinite-v1'));
     if (inf) hub.infinite = { you: Number(inf.you) || 0, cpu: Number(inf.cpu) || 0 };
+    var drops = parse(lsGet('arcade-drops-v1'));
+    if (drops) hub.drops = { best: Number(drops.best) || 0, last: Number(drops.last) || 0, level: Number(drops.level) || 0 };
     var sky = parse(lsGet('@skyline_signal_stats_v1'));
     if (sky) {
       hub.skyline = {
@@ -125,6 +136,7 @@
       if (hub.coffee.stage) lsSet('coffee-rush-stage-v1', String(hub.coffee.stage));
     }
     if (hub.infinite) lsSet('arcade-infinite-v1', JSON.stringify(hub.infinite));
+    if (hub.drops) lsSet('arcade-drops-v1', JSON.stringify(hub.drops));
     if (hub.skyline) {
       var sky = hub.skyline.stats ? Object.assign({}, hub.skyline.stats) : {};
       sky.highScore = Math.max(Number(sky.highScore) || 0, hub.skyline.best || 0);

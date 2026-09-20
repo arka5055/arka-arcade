@@ -112,12 +112,21 @@ function mergeInfinite(a = {}, b = {}) {
   };
 }
 
+function mergeDrops(a = {}, b = {}) {
+  return {
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    last: Math.max(Number(a.last) || 0, Number(b.last) || 0),
+    level: Math.max(Number(a.level) || 0, Number(b.level) || 0),
+  };
+}
+
 function mergeHub(a = {}, b = {}) {
   return {
     tracks: mergeTracks(a.tracks, b.tracks),
     coffee: mergeCoffee(a.coffee, b.coffee),
     skyline: mergeSkyline(a.skyline, b.skyline),
     infinite: mergeInfinite(a.infinite, b.infinite),
+    drops: mergeDrops(a.drops, b.drops),
     last: b.last || a.last || null,
     updated: Date.now(),
   };
@@ -236,6 +245,22 @@ export function saveInfinite(data) {
   write('arcade-infinite-v1', payload);
 }
 
+export function loadDrops() {
+  const h = hub().drops || {};
+  const legacy = read('arcade-drops-v1') || {};
+  return mergeDrops(h, {
+    best: Number(legacy.best) || 0,
+    last: Number(legacy.last) || 0,
+    level: Number(legacy.level) || 0,
+  });
+}
+
+export function saveDrops(data) {
+  const payload = mergeDrops(loadDrops(), data);
+  saveHub({ drops: payload });
+  write('arcade-drops-v1', payload);
+}
+
 export function scoreBits(id) {
   if (id === 'tracks') {
     const t = loadTracks();
@@ -273,6 +298,15 @@ export function scoreBits(id) {
       value: played ? 1 : 0,
       display: played ? `${i.you}–${i.cpu}` : '—',
       note: played ? 'vs CPU' : '',
+    };
+  }
+  if (id === 'drops') {
+    const d = loadDrops();
+    return {
+      label: 'Best',
+      value: d.best || 0,
+      display: d.best ? String(d.best) : '—',
+      note: d.level ? `Level ${d.level}` : '',
     };
   }
   return { label: 'Best', value: 0, display: '—', note: '' };
