@@ -1,4 +1,4 @@
-import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=18';
+import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=19';
 
 export const W = 390;
 export const H = 844;
@@ -511,6 +511,16 @@ export function validateStage(graph) {
     }
   }
   for (const sw of switches) errors.push(...assertSwitchGeometry(sw, graph.edges));
+  for (const e of graph.edges) {
+    for (let i = 1; i < e.pts.length - 1; i++) {
+      const t = i / (e.pts.length - 1);
+      if (t < 0.14 || t > 0.86) continue;
+      for (const sw of switches) {
+        if (sw.id === e.from.nodeId || sw.id === e.to.nodeId) continue;
+        if (hypot(e.pts[i], sw) < HUB_R - 1) errors.push(`${e.id}: crosses ${sw.id}`);
+      }
+    }
+  }
   if (graph.spec?.n === 4) {
     if (graph.edges.length !== 7) errors.push(`four-station edges ${graph.edges.length} != 7`);
     if (stations.length !== 4) errors.push('four-station: station count');

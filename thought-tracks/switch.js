@@ -73,15 +73,6 @@ export function hubCenterline(sw, fromPort, toPort, steps = 24) {
   return hubCurveFromAngles(sw, PORT_ANG[fromPort], PORT_ANG[toPort], steps);
 }
 
-function overlapByPort(pts, angA, angB, d) {
-  if (!pts || pts.length < 2) return pts;
-  const a = pts[0];
-  const b = pts[pts.length - 1];
-  const pre = { x: a.x + Math.cos(angA) * d, y: a.y + Math.sin(angA) * d };
-  const post = { x: b.x + Math.cos(angB) * d, y: b.y + Math.sin(angB) * d };
-  return [pre, ...pts, post];
-}
-
 export function liveOutPort(sw) {
   return sw.arm ? sw.out1 : sw.out0;
 }
@@ -99,7 +90,17 @@ export function bladePts(sw) {
     while (d < -Math.PI) d += Math.PI * 2;
     angOut = a0 + d * t;
   }
-  return overlapByPort(hubCurveFromAngles(sw, PORT_ANG[sw.inPort], angOut), PORT_ANG[sw.inPort], angOut, 8);
+  return hubCurveFromAngles(sw, PORT_ANG[sw.inPort], angOut);
+}
+
+export function clipOutsideHubs(ctx, switches, x, y, w, h) {
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  for (const sw of switches) {
+    ctx.moveTo(sw.x + HUB_R, sw.y);
+    ctx.arc(sw.x, sw.y, HUB_R - 0.2, 0, Math.PI * 2, true);
+  }
+  ctx.clip('evenodd');
 }
 
 export function committedHub(sw) {
@@ -152,24 +153,11 @@ export function strokeCenterline(ctx, pts, opts = {}) {
 export function drawHub(ctx, sw) {
   ctx.beginPath();
   ctx.arc(sw.x, sw.y, HUB_R + (sw.flash || 0) * 6, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(82, 148, 78, 0.55)';
+  ctx.fillStyle = 'rgba(82, 148, 78, 0.62)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(238,243,228,0.88)';
+  ctx.strokeStyle = 'rgba(238,243,228,0.9)';
   ctx.lineWidth = 2.4;
   ctx.stroke();
-  const live = liveOutPort(sw);
-  for (const port of [sw.inPort, sw.out0, sw.out1]) {
-    if (port === sw.inPort || port === live) continue;
-    const p = switchPort(sw, port);
-    const inner = {
-      x: sw.x + (p.x - sw.x) * 0.22,
-      y: sw.y + (p.y - sw.y) * 0.22,
-    };
-    strokeCenterline(ctx, [p, inner], {
-      width: 10, sleepers: false, cap: 'butt', alpha: 0.55,
-      bed: '#d5dbc8', gauge: '#3a4436',
-    });
-  }
 }
 
 export function drawBlade(ctx, sw) {

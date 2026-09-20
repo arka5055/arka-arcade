@@ -6,11 +6,11 @@ import {
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
 } from './graph.js?v=9';
 import {
-  HUB_R, HIT_R,
+  clipOutsideHubs, HIT_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=18';
-import { thumbnail, stageMeta } from './stages.js?v=10';
+} from './switch.js?v=19';
+import { thumbnail, stageMeta } from './stages.js?v=11';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -682,7 +682,7 @@ function strokeRail(pts, live) {
     alpha: live ? 1 : 0.42,
     bed: live ? '#e7ead8' : '#c5cbb8',
     gauge: live ? '#2a3424' : '#3a4436',
-    cap: 'round',
+    cap: 'butt',
   });
 }
 
@@ -852,9 +852,13 @@ function render() {
   drawField();
   const g = state.graph;
   if (!g) return;
-  for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawHub(ctx, n);
+  const switches = Object.values(g.nodes).filter((n) => n.kind === 'switch');
+  ctx.save();
+  clipOutsideHubs(ctx, switches, 0, 0, W, H);
   for (const e of g.edges) strokeRail(e.pts, true);
-  for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawBlade(ctx, n);
+  ctx.restore();
+  for (const n of switches) drawHub(ctx, n);
+  for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);
   for (const s of g.sources) drawSource(s);
   for (const n of Object.values(g.nodes)) if (n.kind === 'station') drawStation(n);

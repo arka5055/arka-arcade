@@ -1,5 +1,5 @@
 import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=9';
-import { strokeCenterline, HUB_R } from './switch.js?v=18';
+import { strokeCenterline, HUB_R, clipOutsideHubs, drawHub, drawBlade } from './switch.js?v=19';
 
 const thumbs = new Map();
 
@@ -27,16 +27,17 @@ export function paintThumbnail(canvas, graph) {
   const pad = 22;
   const s = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
   ctx.setTransform(s, 0, 0, s, (w - bw * s) / 2 - minX * s, (h - bh * s) / 2 - minY * s);
+  const switches = Object.values(graph.nodes).filter((n) => n.kind === 'switch');
+  ctx.save();
+  clipOutsideHubs(ctx, switches, minX - 80, minY - 80, bw + 160, bh + 160);
   for (const e of graph.edges) {
-    strokeCenterline(ctx, e.pts, { width: 16, sleepers: false, cap: 'round' });
+    strokeCenterline(ctx, e.pts, { width: 16, sleepers: false, cap: 'butt' });
   }
+  ctx.restore();
+  for (const n of switches) drawHub(ctx, n);
+  for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(graph.nodes)) {
-    if (n.kind === 'switch') {
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, HUB_R, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(88, 158, 78, 0.92)';
-      ctx.fill();
-    } else if (n.kind === 'station') {
+    if (n.kind === 'station') {
       ctx.beginPath();
       ctx.arc(n.x, n.y, 18, 0, Math.PI * 2);
       ctx.fillStyle = PALETTE[tokenParts(n.color)[0]] || '#eef3e4';
