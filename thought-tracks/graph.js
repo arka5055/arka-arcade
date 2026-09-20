@@ -71,7 +71,9 @@ export function stageFor(level, rung = 0) {
     conc = 6.0 + rung * 0.15;
   }
   const gap = row.time / pool;
-  const bits = row.n === 6
+  const bits = row.n === 7
+    ? ['000', '001', '01', '10', '110', '1110', '1111']
+    : row.n === 6
     ? ['00', '010', '011', '10', '110', '111']
     : row.n === 3 ? ['0', '10', '11'] : balancedBits(row.n);
   return {
@@ -416,6 +418,42 @@ function layoutSix(nodes, edges, tokens, region) {
   addCurve(edges, j5, 'SE', stV, 'NW');
   return j1;
 }
+function layoutSeven(nodes, edges, tokens, region) {
+  const [pink, black, green, yellow, blue, violet, white] = tokens;
+  const p = (x, y) => atPct(region, x, y);
+  const j1 = mkSw('J:', '', ...xy(p(22, 50)), 'W', 'NE', 'SE');
+  const j2 = mkSw('J:0', '0', ...xy(p(42, 22)), 'SW', 'N', 'E');
+  const j4 = mkSw('J:00', '00', ...xy(p(68, 10)), 'SW', 'N', 'E');
+  const j3 = mkSw('J:1', '1', ...xy(p(42, 60)), 'NW', 'E', 'SE');
+  const j5 = mkSw('J:11', '11', ...xy(p(66, 76)), 'NW', 'E', 'S');
+  const j6 = mkSw('J:111', '111', ...xy(p(66, 96)), 'N', 'W', 'E');
+  j1.sourceAt = p(6, 50);
+  const st = (color, x, y, port) => ({
+    id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
+  });
+  const stP = st(pink, 68, 0, 'S');
+  const stK = st(black, 94, 12, 'W');
+  const stG = st(green, 94, 34, 'W');
+  const stY = st(yellow, 94, 54, 'W');
+  const stB = st(blue, 94, 76, 'W');
+  const stV = st(violet, 40, 96, 'E');
+  const stW = st(white, 94, 96, 'W');
+  for (const n of [j1, j2, j3, j4, j5, j6, stP, stK, stG, stY, stB, stV, stW]) nodes[n.id] = n;
+  addCurve(edges, j1, 'NE', j2, 'SW');
+  addCurve(edges, j1, 'SE', j3, 'NW');
+  addCurve(edges, j2, 'N', j4, 'SW');
+  addCurve(edges, j2, 'E', stG, 'W');
+  addCurve(edges, j4, 'N', stP, 'S');
+  addCurve(edges, j4, 'E', stK, 'W');
+  addCurve(edges, j3, 'E', stY, 'W');
+  addCurve(edges, j3, 'SE', j5, 'NW');
+  addCurve(edges, j5, 'E', stB, 'W');
+  addCurve(edges, j5, 'S', j6, 'N');
+  addCurve(edges, j6, 'W', stV, 'E');
+  addCurve(edges, j6, 'E', stW, 'W');
+  return j1;
+}
+function xy(pt) { return [pt.x, pt.y]; }
 function playRegion() { return { x0: 28, y0: 132, x1: 362, y1: 708 }; }
 
 export function buildStage(level, rung = 0) {
@@ -430,7 +468,9 @@ export function buildStage(level, rung = 0) {
         ? layoutFour(nodes, edges, spec.tokens, region)
         : spec.n === 6
           ? layoutSix(nodes, edges, spec.tokens, region)
-          : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
+          : spec.n === 7
+            ? layoutSeven(nodes, edges, spec.tokens, region)
+            : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
     x: root.sourceAt?.x ?? (root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120),
@@ -690,6 +730,33 @@ export function validateStage(graph) {
       Y: ['J:', 'J:1', 'ST:Y'],
       B: ['J:', 'J:1', 'J:11', 'ST:B'],
       V: ['J:', 'J:1', 'J:11', 'ST:V'],
+    };
+    for (const [color, path] of Object.entries(expect)) {
+      const bits = graph.codes[color];
+      let node = graph.root;
+      const got = [node.id];
+      for (const bit of bits) {
+        const port = bit === '1' ? node.out1 : node.out0;
+        const edge = graph.edges.find((e) => e.from.nodeId === node.id && e.from.port === port);
+        if (!edge) { errors.push(`${color}: missing ${port} from ${node.id}`); break; }
+        node = byId[edge.to.nodeId];
+        got.push(node.id);
+      }
+      if (got.join() !== path.join()) errors.push(`${color} path ${got.join('>')} != ${path.join('>')}`);
+    }
+  }
+  if (graph.spec?.n === 7) {
+    if (graph.edges.length !== 13) errors.push(`seven-station edges ${graph.edges.length} != 13`);
+    if (stations.length !== 7) errors.push('seven-station: station count');
+    if (switches.length !== 6) errors.push('seven-station: switch count');
+    const expect = {
+      P: ['J:', 'J:0', 'J:00', 'ST:P'],
+      K: ['J:', 'J:0', 'J:00', 'ST:K'],
+      G: ['J:', 'J:0', 'ST:G'],
+      Y: ['J:', 'J:1', 'ST:Y'],
+      B: ['J:', 'J:1', 'J:11', 'ST:B'],
+      V: ['J:', 'J:1', 'J:11', 'J:111', 'ST:V'],
+      W: ['J:', 'J:1', 'J:11', 'J:111', 'ST:W'],
     };
     for (const [color, path] of Object.entries(expect)) {
       const bits = graph.codes[color];
