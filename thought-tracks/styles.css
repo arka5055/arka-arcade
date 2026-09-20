@@ -162,3 +162,114 @@ a.home-link {
 .stats strong { display: block; font-size: 22px; }
 
 .hidden { display: none; }
+
+.overlay.stages {
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: max(72px, calc(env(safe-area-inset-top) + 56px)) 12px calc(18px + env(safe-area-inset-bottom));
+  background: #243826;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.overlay.stages.hidden { display: none; }
+
+.stages-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--cream);
+}
+.stages-head h1 { margin: 0; font-size: 28px; }
+.stages-head .kicker {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  opacity: 0.6;
+}
+.stages-head .icon {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 22px;
+  background: rgba(238,243,228,0.14);
+  color: var(--cream);
+  font: 700 22px/1 inherit;
+}
+.stages-continue {
+  margin: 0 0 4px;
+  color: var(--cream);
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.stage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stage-card {
+  position: relative;
+  margin: 0;
+  padding: 8px 8px 10px;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background: #eef3e4;
+  color: var(--ink);
+  text-align: left;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.stage-card canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  background: #3a5f3c;
+}
+.stage-card b {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.stage-card .meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+.stage-card .best {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.stage-card.continue { border-color: #d4a017; }
+.stage-card.locked {
+  opacity: 0.42;
+  filter: grayscale(0.35);
+}
+.stage-card .tag {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: #d4a017;
+  color: #2b1d04;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}

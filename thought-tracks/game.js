@@ -8,8 +8,9 @@ import {
 import {
   HUB_R, HIT_R, COMMIT_PAD,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
-  committedHub, liveOutPort,
+  committedHub,
 } from './switch.js?v=9';
+import { thumbnail, stageMeta } from './stages.js?v=10';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -24,15 +25,26 @@ const ui = {
   title: document.getElementById('title'),
   pause: document.getElementById('pause'),
   done: document.getElementById('done'),
+  stages: document.getElementById('stages'),
+  grid: document.getElementById('stage-grid'),
 };
 
 let audioCtx = null;
 let muted = false;
 let best = 0;
+let unlocked = 1;
+let lastPlayed = 1;
+let records = {};
+let stagesReturn = 'play';
+let savedRung = 0;
 try {
   const save = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
   best = save.best || 0;
   muted = !!save.muted;
+  unlocked = Math.max(1, Math.min(16, save.unlocked || 1));
+  lastPlayed = Math.max(1, Math.min(16, save.last || save.level || 1));
+  records = save.records && typeof save.records === 'object' ? save.records : {};
+  savedRung = save.rung || 0;
 } catch {}
 
 const state = {
@@ -56,13 +68,17 @@ const state = {
   nextId: 1,
   tapQueue: null,
   debug: /[?&]debug=1/.test(location.search),
-  rung: 0,
+  rung: savedRung,
   recovery: 0,
   lastLaunch: 0,
 };
 
 function persist() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 14, best, muted, level: state.level, rung: state.rung })); } catch {}
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      version: 15, best, muted, unlocked, last: lastPlayed, rung: state.rung, records,
+    }));
+  } catch {}
 }
 
 function unlockAudio() {
@@ -367,12 +383,20 @@ function failWhy() {
 }
 
 function endRound(advanced) {
-  if (state.score > best) { best = state.score; persist(); }
+  if (state.score > best) best = state.score;
+  const rec = records[state.level];
+  if (!rec || state.home > rec.home || (state.home === rec.home && state.score > (rec.score || 0))) {
+    records[state.level] = { home: state.home, quota: state.quota, score: state.score };
+  }
+  if (advanced) unlocked = Math.max(unlocked, Math.min(16, state.level + 1));
+  lastPlayed = state.level;
+  persist();
   state.mode = 'done';
   state.cleared = advanced;
   if (advanced && state.level === 14) {
     if (state.missed <= 1) state.rung = Math.min(L14_RUNGS.length - 1, (state.rung || 0) + 1);
     else if (state.missed >= 4) state.rung = Math.max(0, (state.rung || 0) - 1);
+    persist();
   }
   ui.done.classList.remove('hidden');
   document.getElementById('done-title').textContent = advanced ? `Level ${state.level} cleared` : 'Round over';
@@ -388,6 +412,8 @@ function endRound(advanced) {
 }
 
 function startLevel(level, rung = state.rung) {
+  lastPlayed = level;
+  persist();
   const spec = stageFor(level, level === 14 ? rung : 0);
   const graph = buildStage(level, level === 14 ? rung : 0);
   const report = validateStage(graph);
@@ -424,7 +450,77 @@ function startLevel(level, rung = state.rung) {
   refreshHud();
 }
 
-function startGame() { startLevel(1); }
+function startGame() { startLevel(Math.min(lastPlayed, unlocked) || 1); }
+
+function renderStages() {
+  const continueAt = unlocked;
+  document.getElementById('stages-continue').textContent =
+    `Highest unlocked: Level ${continueAt}. Tap any open stage.`;
+  ui.grid.replaceChildren();
+  for (let level = 1; level <= 16; level++) {
+    const meta = stageMeta(level);
+    const rec = records[level];
+    const locked = level > unlocked;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = `stage-card${locked ? ' locked' : ''}${level === continueAt ? ' continue' : ''}`;
+    card.disabled = locked;
+    card.setAttribute('aria-label', locked ? `Level ${level} locked` : `Level ${level}`);
+    const shot = thumbnail(level);
+    const view = document.createElement('canvas');
+    view.width = shot.width;
+    view.height = shot.height;
+    view.getContext('2d').drawImage(shot, 0, 0);
+    card.append(view);
+    if (level === continueAt && !locked) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = 'CONTINUE';
+      card.append(tag);
+    }
+    const title = document.createElement('b');
+    title.textContent = `LEVEL ${level}`;
+    const info = document.createElement('span');
+    info.className = 'meta';
+    info.textContent = `${meta.stations} stations  ·  up to ${meta.cap} trains`;
+    const bestLine = document.createElement('span');
+    bestLine.className = 'best';
+    bestLine.textContent = rec ? `Best: ${rec.home} / ${rec.quota}` : 'Best: —';
+    card.append(title, info, bestLine);
+    if (!locked) card.addEventListener('click', () => pickStage(level));
+    ui.grid.append(card);
+  }
+}
+
+function openStages(from = 'play') {
+  unlockAudio();
+  stagesReturn = from;
+  if (from === 'play' && state.mode === 'play') state.mode = 'pause';
+  ui.pause.classList.add('hidden');
+  ui.done.classList.add('hidden');
+  renderStages();
+  ui.stages.classList.remove('hidden');
+}
+
+function closeStages() {
+  ui.stages.classList.add('hidden');
+  if (stagesReturn === 'done') {
+    ui.done.classList.remove('hidden');
+    return;
+  }
+  if (state.graph && state.mode === 'pause') {
+    state.mode = 'play';
+    last = performance.now();
+  }
+}
+
+function pickStage(level) {
+  if (level > unlocked) return;
+  ui.stages.classList.add('hidden');
+  ui.pause.classList.add('hidden');
+  ui.done.classList.add('hidden');
+  startLevel(level);
+}
 
 function formatTime(s) {
   const m = Math.floor(s / 60);
@@ -765,22 +861,21 @@ canvas.addEventListener('pointerdown', (ev) => {
 function restartGame(ev) {
   ev?.preventDefault();
   ev?.stopPropagation();
-  unlockAudio();
-  ui.pause.classList.add('hidden');
-  ui.done.classList.add('hidden');
-  startGame();
+  openStages(state.mode === 'done' ? 'done' : 'play');
 }
 
 document.getElementById('btn-again').addEventListener('click', () => {
   unlockAudio();
   ui.done.classList.add('hidden');
   if (state.cleared && state.level < 16) startLevel(state.level + 1);
-  else startGame();
+  else startLevel(state.level);
 });
 document.getElementById('btn-restart').addEventListener('pointerdown', restartGame);
 document.getElementById('btn-restart').addEventListener('click', restartGame);
 document.getElementById('btn-new').addEventListener('pointerdown', restartGame);
 document.getElementById('btn-new').addEventListener('click', restartGame);
+document.getElementById('btn-stages').addEventListener('click', () => openStages('done'));
+document.getElementById('btn-stages-close').addEventListener('click', closeStages);
 document.getElementById('btn-pause').addEventListener('click', () => {
   if (state.mode !== 'play') return;
   state.mode = 'pause';
@@ -813,7 +908,7 @@ refreshHud();
 document.getElementById('btn-mute').textContent = muted ? '×' : '♪';
 startGame();
 requestAnimationFrame(loop);
-window.__qa = { startLevel, state, buildStage, validateStage };
+window.__qa = { startLevel, state, buildStage, validateStage, openStages, pickStage, get unlocked() { return unlocked; }, setUnlocked(n) { unlocked = n; } };
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('service-worker.js', import.meta.url), { updateViaCache: 'none' }).catch(() => {});
 }

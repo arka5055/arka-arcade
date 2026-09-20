@@ -33,7 +33,7 @@
       <h1>Paused</h1>
       <p class="hint">Switches stay as you left them.</p>
       <button class="play" id="btn-resume">RESUME</button>
-      <button class="ghost" id="btn-new">NEW GAME</button>
+      <button class="ghost" id="btn-new">STAGES</button>
       <a class="ghost home-link" href="/">ALL GAMES</a>
     </div>
   </div>
@@ -49,10 +49,23 @@
         <div>Best<strong id="done-best">0</strong></div>
       </div>
       <button class="play" id="btn-again">PLAY AGAIN</button>
+      <button class="ghost" id="btn-stages">STAGES</button>
       <a class="ghost home-link" href="/">ALL GAMES</a>
     </div>
   </div>
 
-  <script type="module" src="./game.js?v=9"></script>
+  <div class="overlay stages hidden" id="stages">
+    <div class="stages-head">
+      <div>
+        <p class="kicker">ARKA</p>
+        <h1>Stages</h1>
+      </div>
+      <button class="icon" id="btn-stages-close" aria-label="Close">×</button>
+    </div>
+    <p class="stages-continue" id="stages-continue"></p>
+    <div class="stage-grid" id="stage-grid"></div>
+  </div>
+
+  <script type="module" src="./game.js?v=10"></script>
 </body>
 </html>
