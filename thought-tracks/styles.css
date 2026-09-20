@@ -308,9 +308,32 @@ body.stages-open .arcade-home { display: none; }
   background: #dce9d4;
   border-color: #2f7a3a;
 }
-.stage-card.cleared.continue {
-  border-color: #d4a017;
-  box-shadow: inset 0 0 0 2px #2f7a3a;
+.stage-card.locked {
+  opacity: 0.46;
+  filter: grayscale(0.25);
+}
+.stage-card.locked .shot {
+  pointer-events: none;
+}
+.stage-card .dual-tag {
+  left: auto;
+  right: 14px;
+  background: #6b4f8a;
+  color: #eef3e4;
+}
+.stage-card.cleared .dual-tag {
+  display: none;
+}
+.stage-card .dual-mark {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  background: #6b4f8a;
+  color: #eef3e4;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
 }
 .stage-card .tag {
   position: absolute;

@@ -1,5 +1,5 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
-import { loadTracks, saveTracks, pullServer } from '/progress.js?v=5';
+import { loadTracks, saveTracks, pullServer } from '/progress.js?v=6';
 import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
@@ -34,31 +34,44 @@ const ui = {
 let audioCtx = null;
 let muted = false;
 let best = 0;
-let unlocked = LAST_STAGE;
+let unlocked = 1;
 let lastPlayed = 1;
 let records = {};
 let cleared = {};
 let stagesReturn = 'play';
 let savedRung = 0;
+
+function syncUnlock() {
+  let u = Math.max(1, Number(unlocked) || 1);
+  for (let i = 1; i <= LAST_STAGE; i++) {
+    if (isCleared(i)) u = Math.max(u, i + 1);
+  }
+  unlocked = Math.min(LAST_STAGE, u);
+}
+
 try {
   const save = loadTracks();
   best = save.best || 0;
   muted = !!save.muted;
-  unlocked = LAST_STAGE;
   lastPlayed = Math.min(LAST_STAGE, save.last || 1);
   records = save.records || {};
   savedRung = save.rung || 0;
   cleared = save.cleared || {};
+  unlocked = Math.max(1, Number(save.unlocked) || 1);
+  syncUnlock();
+  lastPlayed = Math.min(lastPlayed, unlocked);
 } catch {}
 
 pullServer().then((next) => {
   if (!next?.tracks) return;
   const save = loadTracks();
   best = save.best || best;
-  lastPlayed = Math.min(LAST_STAGE, save.last || lastPlayed);
   records = save.records || records;
   cleared = save.cleared || cleared;
   savedRung = save.rung || savedRung;
+  unlocked = Math.max(unlocked, Number(save.unlocked) || 1);
+  syncUnlock();
+  lastPlayed = Math.min(LAST_STAGE, save.last || lastPlayed, unlocked);
   persist();
 });
 
@@ -71,11 +84,12 @@ function markCleared(level) {
   const k = String(level);
   cleared[k] = true;
   records[k] = { ...(records[k] || {}), cleared: true };
+  unlocked = Math.min(LAST_STAGE, Math.max(unlocked, level + 1));
 }
 
 function persist() {
   saveTracks({
-    best, muted, last: lastPlayed, rung: state.rung, records, cleared,
+    best, muted, last: lastPlayed, rung: state.rung, records, cleared, unlocked,
   });
 }
 
@@ -292,14 +306,10 @@ function decisionPressure() {
   return state.trains.filter((tr) => nextSwitchEta(tr) <= DECISION_HORIZON).length;
 }
 
-function spawnCutoff() {
-  const travel = (state.graph?.longest || 180) / SPEED;
-  return travel + 1;
-}
-
 function canRelease(source) {
   const spec = state.spec;
-  if (state.remaining <= spawnCutoff()) return false;
+  if (state.remaining <= 0) return false;
+  if (state.spawned >= state.quota) return false;
   if (state.trains.length >= spec.cap) return false;
   if (decisionPressure() >= spec.pressure) return false;
   const edge = nextLiveEdge(state.graph, source);
@@ -517,7 +527,7 @@ function endRound(advanced) {
 }
 
 function startLevel(level, rung = state.rung) {
-  level = Math.max(1, Math.min(LAST_STAGE, level));
+  level = Math.max(1, Math.min(unlocked, LAST_STAGE, level));
   lastPlayed = level;
   persist();
   const spec = stageFor(level, level === 14 ? rung : 0);
@@ -569,8 +579,9 @@ function renderStages() {
     const done = isCleared(level);
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = `stage-card${done ? ' cleared' : ''}${level === lastPlayed ? ' continue' : ''}`;
-    card.setAttribute('aria-label', done ? `Level ${level} cleared` : `Level ${level}`);
+    card.className = `stage-card${done ? ' cleared' : ''}${level === lastPlayed ? ' continue' : ''}${level > unlocked ? ' locked' : ''}`;
+    card.disabled = level > unlocked;
+    card.setAttribute('aria-label', level > unlocked ? `Level ${level} locked` : done ? `Level ${level} cleared` : `Level ${level}`);
     const shot = thumbnail(level);
     const view = document.createElement('canvas');
     view.width = shot.width;
@@ -589,7 +600,7 @@ function renderStages() {
       clearedTag.textContent = 'CLEARED';
       card.append(clearedTag);
     }
-    if (level === lastPlayed) {
+    if (level === lastPlayed && level <= unlocked) {
       const tag = document.createElement('span');
       tag.className = 'tag';
       tag.textContent = 'CONTINUE';
@@ -597,6 +608,13 @@ function renderStages() {
     }
     const title = document.createElement('b');
     title.textContent = `STAGE ${level}`;
+    if (level === 8) {
+      const dual = document.createElement('span');
+      dual.className = done ? 'dual-mark' : 'tag dual-tag';
+      dual.textContent = 'DUAL COLOR';
+      if (done) title.append(dual);
+      else card.append(dual);
+    }
     const line = document.createElement('span');
     line.className = 'meta';
     line.textContent = `${meta.stations} stations · up to ${meta.cap} trains`;
@@ -635,6 +653,7 @@ function closeStages() {
 }
 
 function pickStage(level) {
+  if (level > unlocked) return;
   document.body.classList.remove('stages-open');
   ui.stages.classList.add('hidden');
   ui.pause.classList.add('hidden');
@@ -968,10 +987,9 @@ function step(dt) {
   }
 
   const spec = state.spec;
-  const cutoff = state.remaining <= spawnCutoff();
-  const doneSpawning = cutoff || state.spawned >= state.quota;
+  const doneSpawning = state.remaining <= 0 || state.spawned >= state.quota;
   const idle = doneSpawning && state.trains.length === 0;
-  if (state.remaining <= 0 || idle) {
+  if (idle) {
     endRound(roundPassed());
     return;
   }

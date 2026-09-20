@@ -19,6 +19,7 @@ This game lives in the My Arkade monorepo.
 - Each correctly routed train scores `100 × current level`.
 - Wrong station is a miss. Misses do not subtract points.
 - Stages 1–2 require a minimum number of correct trains. Stages 3–9 allow ≤3 misses.
+- The timer is the release window. Existing trains still finish after it hits zero.
 - From stage 8, some trains and stations use two colors.
 
 See [PROGRESSION.md](./PROGRESSION.md) for the Stage 1–9 map and skill ladder.

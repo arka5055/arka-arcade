@@ -80,6 +80,7 @@ function mergeTracks(a = {}, b = {}) {
     muted: !!(b.muted ?? a.muted),
     last: b.last || a.last || 1,
     rung: Math.max(Number(a.rung) || 0, Number(b.rung) || 0),
+    unlocked: Math.max(1, Number(a.unlocked) || 1, Number(b.unlocked) || 1),
     records,
     cleared,
   };
