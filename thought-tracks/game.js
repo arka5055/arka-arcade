@@ -480,13 +480,16 @@ function renderStages() {
     }
     const title = document.createElement('b');
     title.textContent = `LEVEL ${level}`;
-    const info = document.createElement('span');
-    info.className = 'meta';
-    info.textContent = `${meta.stations} stations  ·  up to ${meta.cap} trains`;
+    const stations = document.createElement('span');
+    stations.className = 'meta';
+    stations.textContent = `${meta.stations} stations`;
+    const trains = document.createElement('span');
+    trains.className = 'meta';
+    trains.textContent = `up to ${meta.cap} trains`;
     const bestLine = document.createElement('span');
     bestLine.className = 'best';
     bestLine.textContent = rec ? `Best: ${rec.home} / ${rec.quota}` : 'Best: —';
-    card.append(title, info, bestLine);
+    card.append(title, stations, trains, bestLine);
     if (!locked) card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
