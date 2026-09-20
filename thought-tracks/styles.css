@@ -258,7 +258,14 @@ a.home-link {
   font-weight: 800;
 }
 .stage-card.continue { border-color: #d4a017; }
-.stage-card.cleared { background: #f4f7ea; }
+.stage-card.cleared {
+  background: #dce9d4;
+  border-color: #2f7a3a;
+}
+.stage-card.cleared.continue {
+  border-color: #d4a017;
+  box-shadow: inset 0 0 0 2px #2f7a3a;
+}
 .stage-card .tag {
   position: absolute;
   top: 14px;
@@ -271,15 +278,14 @@ a.home-link {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
-.stage-card .cleared-mark {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  padding: 3px 7px;
+.stage-card .status {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 3px 8px;
   border-radius: 8px;
   background: #2f7a3a;
   color: #eef3e4;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }

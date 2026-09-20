@@ -46,9 +46,26 @@ try {
   unlocked = 16;
   lastPlayed = Math.max(1, Math.min(16, save.last || save.level || 1));
   records = save.records && typeof save.records === 'object' ? save.records : {};
-  cleared = save.cleared && typeof save.cleared === 'object' ? save.cleared : {};
   savedRung = save.rung || 0;
+  const fromSave = save.cleared && typeof save.cleared === 'object' ? save.cleared : {};
+  const fromBackup = JSON.parse(localStorage.getItem('thought-tracks-cleared-v1') || '[]');
+  cleared = {};
+  for (const [k, v] of Object.entries(fromSave)) if (v) cleared[String(k)] = true;
+  for (const [k, rec] of Object.entries(records)) if (rec?.cleared) cleared[String(k)] = true;
+  if (Array.isArray(fromBackup)) for (const n of fromBackup) cleared[String(n)] = true;
 } catch {}
+
+function isCleared(level) {
+  const k = String(level);
+  return !!(cleared[k] || cleared[level] || records[k]?.cleared || records[level]?.cleared);
+}
+
+function markCleared(level) {
+  const k = String(level);
+  cleared[k] = true;
+  const rec = records[k] || records[level] || {};
+  records[k] = { ...rec, cleared: true };
+}
 
 const state = {
   mode: 'title',
@@ -79,9 +96,11 @@ const state = {
 
 function persist() {
   try {
+    const clearedList = Object.keys(cleared).filter((k) => cleared[k]).map(Number).sort((a, b) => a - b);
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       version: 16, best, muted, unlocked: 16, last: lastPlayed, rung: state.rung, records, cleared,
     }));
+    localStorage.setItem('thought-tracks-cleared-v1', JSON.stringify(clearedList));
   } catch {}
 }
 
@@ -452,8 +471,14 @@ function endRound(advanced) {
     records[state.level] = { home: state.home, quota: state.quota, score: state.score, cleared: !!(rec && rec.cleared) };
   }
   if (advanced) {
-    cleared[state.level] = true;
-    records[state.level] = { ...(records[state.level] || {}), home: Math.max(state.home, records[state.level]?.home || 0), quota: state.quota, score: Math.max(state.score, records[state.level]?.score || 0), cleared: true };
+    markCleared(state.level);
+    records[String(state.level)] = {
+      ...(records[String(state.level)] || records[state.level] || {}),
+      home: Math.max(state.home, records[state.level]?.home || records[String(state.level)]?.home || 0),
+      quota: state.quota,
+      score: Math.max(state.score, records[state.level]?.score || records[String(state.level)]?.score || 0),
+      cleared: true,
+    };
   }
   lastPlayed = state.level;
   persist();
@@ -525,8 +550,8 @@ function renderStages() {
   ui.grid.replaceChildren();
   for (let level = 1; level <= 16; level++) {
     const meta = stageMeta(level);
-    const rec = records[level];
-    const done = !!(cleared[level] || rec?.cleared);
+    const rec = records[level] || records[String(level)];
+    const done = isCleared(level);
     const card = document.createElement('button');
     card.type = 'button';
     card.className = `stage-card${done ? ' cleared' : ''}${level === lastPlayed ? ' continue' : ''}`;
@@ -543,14 +568,15 @@ function renderStages() {
       tag.textContent = 'CONTINUE';
       card.append(tag);
     }
-    if (done) {
-      const mark = document.createElement('span');
-      mark.className = 'cleared-mark';
-      mark.textContent = 'CLEARED';
-      card.append(mark);
-    }
     const title = document.createElement('b');
     title.textContent = `LEVEL ${level}`;
+    card.append(title);
+    if (done) {
+      const status = document.createElement('span');
+      status.className = 'status';
+      status.textContent = '✓  CLEARED';
+      card.append(status);
+    }
     const stations = document.createElement('span');
     stations.className = 'meta';
     stations.textContent = `${meta.stations} stations`;
@@ -563,7 +589,7 @@ function renderStages() {
     const goal = document.createElement('span');
     goal.className = 'meta';
     goal.textContent = `Goal: ${goalLine(stageFor(level, 0))}`;
-    card.append(title, stations, trains, goal, bestLine);
+    card.append(stations, trains, goal, bestLine);
     card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
