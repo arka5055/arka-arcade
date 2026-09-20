@@ -1,4 +1,4 @@
-import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=20';
+import { HUB_R, DIR, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=21';
 
 export const W = 390;
 export const H = 844;

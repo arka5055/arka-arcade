@@ -1,8 +1,9 @@
 /** Canonical turnout: one pivot, three ports, a blade that trains follow. */
 
-export const HUB_R = 28;
+export const HUB_R = 22;
 export const HIT_R = 48;
 export const COMMIT_PAD = 2;
+export const FILLET_R = 8.5;
 
 export const PORT_ANG = {
   E: 0, SE: Math.PI / 4, S: Math.PI / 2, SW: Math.PI * 0.75,
@@ -36,36 +37,32 @@ function angNorm(a) {
   return a;
 }
 
-export function hubCurveFromAngles(sw, angA, angB, steps = 24) {
-  const a = { x: sw.x + Math.cos(angA) * HUB_R, y: sw.y + Math.sin(angA) * HUB_R, ang: angA };
-  const b = { x: sw.x + Math.cos(angB) * HUB_R, y: sw.y + Math.sin(angB) * HUB_R, ang: angB };
+export function hubCurveFromAngles(sw, angA, angB, steps = 14) {
   const c = { x: sw.x, y: sw.y };
+  const a = { x: c.x + Math.cos(angA) * HUB_R, y: c.y + Math.sin(angA) * HUB_R };
+  const b = { x: c.x + Math.cos(angB) * HUB_R, y: c.y + Math.sin(angB) * HUB_R };
   const delta = angNorm(angB - angA);
-  if (Math.abs(Math.abs(delta) - Math.PI) < 0.25) return [a, c, b];
-  const f = { x: a.x + b.x - c.x, y: a.y + b.y - c.y };
-  const r = hypot(a, f);
-  if (r > 6 && Math.abs(hypot(b, f) - r) < 4) {
-    const a0 = Math.atan2(a.y - f.y, a.x - f.x);
-    const a1 = Math.atan2(b.y - f.y, b.x - f.x);
+  if (Math.abs(Math.abs(delta) - Math.PI) < 0.2) return [a, c, b];
+  const ua = { x: Math.cos(angA), y: Math.sin(angA) };
+  const ub = { x: Math.cos(angB), y: Math.sin(angB) };
+  const r = FILLET_R;
+  const tA = { x: c.x + ua.x * r, y: c.y + ua.y * r };
+  const tB = { x: c.x + ub.x * r, y: c.y + ub.y * r };
+  const f = { x: c.x + ua.x * r + ub.x * r, y: c.y + ua.y * r + ub.y * r };
+  const rf = hypot(tA, f);
+  const pts = [a];
+  if (hypot(a, tA) > 1.2) pts.push(tA);
+  if (rf > 2) {
+    const a0 = Math.atan2(tA.y - f.y, tA.x - f.x);
+    const a1 = Math.atan2(tB.y - f.y, tB.x - f.x);
     const sweep = angNorm(a1 - a0);
-    const pts = [];
-    for (let i = 0; i <= steps; i++) {
+    for (let i = 1; i < steps; i++) {
       const ang = a0 + sweep * (i / steps);
-      pts.push({ x: f.x + Math.cos(ang) * r, y: f.y + Math.sin(ang) * r });
+      pts.push({ x: f.x + Math.cos(ang) * rf, y: f.y + Math.sin(ang) * rf });
     }
-    return pts;
   }
-  const iA = { x: c.x + (a.x - c.x) * 0.38, y: c.y + (a.y - c.y) * 0.38 };
-  const iB = { x: c.x + (b.x - c.x) * 0.38, y: c.y + (b.y - c.y) * 0.38 };
-  const pts = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const u = 1 - t;
-    pts.push({
-      x: u * u * u * a.x + 3 * u * u * t * iA.x + 3 * u * t * t * iB.x + t * t * t * b.x,
-      y: u * u * u * a.y + 3 * u * u * t * iA.y + 3 * u * t * t * iB.y + t * t * t * b.y,
-    });
-  }
+  if (hypot(tB, b) > 1.2) pts.push(tB);
+  pts.push(b);
   return pts;
 }
 
@@ -152,22 +149,37 @@ export function strokeCenterline(ctx, pts, opts = {}) {
 
 export function drawHub(ctx, sw) {
   ctx.beginPath();
-  ctx.arc(sw.x, sw.y, HUB_R + (sw.flash || 0) * 6, 0, Math.PI * 2);
+  ctx.arc(sw.x, sw.y, HUB_R + (sw.flash || 0) * 5, 0, Math.PI * 2);
   ctx.fillStyle = '#4c7c48';
   ctx.fill();
   ctx.strokeStyle = '#e8eedc';
-  ctx.lineWidth = 2.6;
+  ctx.lineWidth = 2.4;
   ctx.stroke();
+}
+
+export function drawPivot(ctx, sw) {
+  ctx.beginPath();
+  ctx.arc(sw.x, sw.y, 3.4, 0, Math.PI * 2);
+  ctx.fillStyle = '#eef3e0';
+  ctx.fill();
+  ctx.strokeStyle = '#2a3424';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(sw.x, sw.y, 1.35, 0, Math.PI * 2);
+  ctx.fillStyle = '#2a3424';
+  ctx.fill();
 }
 
 export function drawBlade(ctx, sw) {
   strokeCenterline(ctx, bladePts(sw), {
-    width: 10.5,
+    width: 10,
     bed: '#eef3e0',
     gauge: '#1e2818',
     sleepers: false,
     cap: 'round',
   });
+  drawPivot(ctx, sw);
 }
 
 export function drawPortsDebug(ctx, sw) {

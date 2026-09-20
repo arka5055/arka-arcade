@@ -9,8 +9,8 @@ import {
   HIT_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=20';
-import { thumbnail, stageMeta } from './stages.js?v=12';
+} from './switch.js?v=21';
+import { thumbnail, stageMeta } from './stages.js?v=13';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
