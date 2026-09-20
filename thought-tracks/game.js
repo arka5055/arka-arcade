@@ -1,11 +1,11 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
-import { loadTracks, saveTracks, pullServer } from '/progress.js?v=3';
+import { loadTracks, saveTracks, pullServer } from '/progress.js?v=5';
 import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
-  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine, goalShort,
-} from './graph.js?v=32';
+  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine, goalShort, LAST_STAGE,
+} from './graph.js?v=33';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
@@ -34,7 +34,7 @@ const ui = {
 let audioCtx = null;
 let muted = false;
 let best = 0;
-let unlocked = 16;
+let unlocked = LAST_STAGE;
 let lastPlayed = 1;
 let records = {};
 let cleared = {};
@@ -44,8 +44,8 @@ try {
   const save = loadTracks();
   best = save.best || 0;
   muted = !!save.muted;
-  unlocked = 16;
-  lastPlayed = save.last || 1;
+  unlocked = LAST_STAGE;
+  lastPlayed = Math.min(LAST_STAGE, save.last || 1);
   records = save.records || {};
   savedRung = save.rung || 0;
   cleared = save.cleared || {};
@@ -55,7 +55,7 @@ pullServer().then((next) => {
   if (!next?.tracks) return;
   const save = loadTracks();
   best = save.best || best;
-  lastPlayed = save.last || lastPlayed;
+  lastPlayed = Math.min(LAST_STAGE, save.last || lastPlayed);
   records = save.records || records;
   cleared = save.cleared || cleared;
   savedRung = save.rung || savedRung;
@@ -513,10 +513,11 @@ function endRound(advanced) {
   if (why) {
     why.textContent = advanced ? `Goal met · ${goalLine(state.spec)}` : failWhy();
   }
-  document.getElementById('btn-again').textContent = advanced && state.level < 16 ? 'NEXT LEVEL' : 'PLAY AGAIN';
+  document.getElementById('btn-again').textContent = advanced && state.level < LAST_STAGE ? 'NEXT LEVEL' : 'PLAY AGAIN';
 }
 
 function startLevel(level, rung = state.rung) {
+  level = Math.max(1, Math.min(LAST_STAGE, level));
   lastPlayed = level;
   persist();
   const spec = stageFor(level, level === 14 ? rung : 0);
@@ -562,7 +563,7 @@ function trainLabel(n) { return n === 1 ? '1 train' : `${n} trains`; }
 function renderStages() {
   document.getElementById('stages-continue').textContent = 'Tap any stage. Cleared maps stay marked.';
   ui.grid.replaceChildren();
-  for (let level = 1; level <= 16; level++) {
+  for (let level = 1; level <= LAST_STAGE; level++) {
     const meta = stageMeta(level);
     const rec = records[String(level)];
     const done = isCleared(level);
@@ -1017,7 +1018,7 @@ function restartGame(ev) {
 document.getElementById('btn-again').addEventListener('click', () => {
   unlockAudio();
   ui.done.classList.add('hidden');
-  if (state.cleared && state.level < 16) startLevel(state.level + 1);
+  if (state.cleared && state.level < LAST_STAGE) startLevel(state.level + 1);
   else startLevel(state.level);
 });
 document.getElementById('btn-restart').addEventListener('pointerdown', restartGame);

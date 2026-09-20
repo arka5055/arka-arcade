@@ -243,7 +243,7 @@ export function scoreBits(id) {
       label: 'Best',
       value: t.best || 0,
       display: t.best ? String(t.best) : '—',
-      note: n ? `${n}/16 cleared` : '',
+      note: n ? `${n}/9 cleared` : '',
     };
   }
   if (id === 'coffee') {

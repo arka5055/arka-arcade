@@ -1,4 +1,4 @@
-import { summary, scoreBits, pullServer } from "/progress.js?v=4";
+import { summary, scoreBits, pullServer } from "/progress.js?v=5";
 
 const LAST_KEY = "arka-arcade-last";
 
