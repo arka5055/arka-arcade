@@ -2,9 +2,9 @@
 
 A divided-attention train routing game inspired by Lumosity **Train of Thought**.
 
-This game lives in the Arcade monorepo with Skyline Signal and the launcher.
+This game lives in the ARKA Arcade monorepo.
 
-**Source:** [github.com/arka5055/skyline-signal](https://github.com/arka5055/skyline-signal) (`thought-tracks/`)
+**Source:** [github.com/arka5055/arka-arcade](https://github.com/arka5055/arka-arcade) (`thought-tracks/`)
 
 ## Play
 
