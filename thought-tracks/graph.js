@@ -8,7 +8,7 @@ export const PALETTE = {
   B: '#3d8eb8', V: '#6b4f8a', W: '#e8eadc',
 };
 export const TOKENS = ['P', 'K', 'G', 'Y', 'B', 'V', 'W', 'GK', 'PW', 'BK', 'GP', 'YK', 'BP', 'VY'];
-export const L14_RUNGS = [60, 66, 72, 78, 84, 90];
+export const L14_RUNGS = [72, 78, 84, 90];
 
 export function tokenParts(token) {
   if (!token) return ['P'];
@@ -36,35 +36,40 @@ function zipCodes(tokens, bits) {
 }
 
 const LEVELS = [
-  { id: 1, n: 2, shape: 'fork', cap: 1, conc: 1.0, offered: 8, miss: 3, pressure: 1 },
-  { id: 2, n: 2, shape: 'fork', cap: 2, conc: 1.5, offered: 12, miss: 3, pressure: 1 },
-  { id: 3, n: 3, shape: 'cascade', cap: 2, conc: 1.8, offered: 16, miss: 3, pressure: 1 },
-  { id: 4, n: 4, shape: 'balanced', cap: 3, conc: 2.2, offered: 20, miss: 3, pressure: 2 },
-  { id: 5, n: 5, shape: 'mixed', cap: 3, conc: 2.7, offered: 24, miss: 3, pressure: 2 },
-  { id: 6, n: 6, shape: 'balanced', cap: 4, conc: 3.1, offered: 28, miss: 3, pressure: 2 },
-  { id: 7, n: 7, shape: 'three', cap: 4, conc: 3.5, offered: 32, miss: 3, pressure: 2 },
-  { id: 8, n: 8, shape: 'balanced', cap: 5, conc: 4.2, offered: 38, miss: 3, pressure: 3 },
-  { id: 9, n: 9, shape: 'mixed', cap: 5, conc: 4.6, offered: 44, miss: 3, pressure: 3 },
-  { id: 10, n: 10, shape: 'long', cap: 6, conc: 5.0, offered: 50, miss: 3, pressure: 3 },
-  { id: 11, n: 11, shape: 'mixed', cap: 6, conc: 5.3, offered: 56, miss: 2, pressure: 3 },
-  { id: 12, n: 12, shape: 'three', cap: 6, conc: 5.6, offered: 62, miss: 2, pressure: 3 },
-  { id: 13, n: 13, shape: 'mixed', cap: 7, conc: 6.0, offered: 68, miss: 1, pressure: 3 },
-  { id: 14, n: 14, shape: 'balanced', cap: 7, conc: 6.2, offered: 60, miss: 1, pressure: 3 },
-  { id: 15, n: 14, shape: 'long', cap: 7, conc: 6.4, offered: 90, miss: 1, pressure: 3 },
-  { id: 16, n: 14, shape: 'three', cap: 7, conc: 6.6, offered: 90, miss: 1, pressure: 3 },
+  { id: 1, n: 2, shape: 'fork', cap: 1, conc: 1.0, pool: 6, time: 34, miss: 1, need: 5, pressure: 1, intro: 'Tap the green switch to send each train to the matching station.' },
+  { id: 2, n: 2, shape: 'fork', cap: 2, conc: 1.5, pool: 10, time: 44, miss: 2, need: 8, pressure: 1, intro: 'A second train can leave before the first arrives.' },
+  { id: 3, n: 3, shape: 'cascade', cap: 2, conc: 1.8, pool: 14, time: 54, miss: 3, pressure: 2, intro: 'Some stations need two switches.' },
+  { id: 4, n: 4, shape: 'balanced', cap: 3, conc: 2.2, pool: 18, time: 64, miss: 3, pressure: 2, intro: 'Watch both sides of the board.' },
+  { id: 5, n: 5, shape: 'mixed', cap: 3, conc: 2.6, pool: 22, time: 74, miss: 3, pressure: 2, intro: 'Prioritize the nearest switch, not the newest train.' },
+  { id: 6, n: 6, shape: 'balanced', cap: 4, conc: 3.0, pool: 28, time: 84, miss: 3, pressure: 3, intro: 'Several trains may be on the rails at once.' },
+  { id: 7, n: 7, shape: 'three', cap: 4, conc: 3.5, pool: 34, time: 94, miss: 3, pressure: 3, intro: 'Scan the whole board. Downstream switches stay set.' },
+  { id: 8, n: 8, shape: 'balanced', cap: 5, conc: 4.0, pool: 42, time: 104, miss: 3, pressure: 3, intro: 'NEW: Two-color trains must match two-color stations.' },
+  { id: 9, n: 9, shape: 'mixed', cap: 5, conc: 4.4, pool: 48, time: 108, miss: 3, pressure: 3, intro: 'Two switches can need a tap at almost the same time.' },
+  { id: 10, n: 10, shape: 'long', cap: 6, conc: 4.8, pool: 56, time: 114, miss: 3, pressure: 3, intro: 'The first switch may serve two trains in a row.' },
+  { id: 11, n: 11, shape: 'mixed', cap: 6, conc: 5.1, pool: 64, time: 120, miss: 2, pressure: 3, intro: 'At most 2 misses this round.' },
+  { id: 12, n: 12, shape: 'three', cap: 6, conc: 5.4, pool: 68, time: 120, miss: 2, pressure: 3, intro: 'Park one plan. Service the nearer train. Resume.' },
+  { id: 13, n: 13, shape: 'mixed', cap: 7, conc: 5.8, pool: 74, time: 120, miss: 1, pressure: 3, intro: 'At most 1 miss this round.' },
+  { id: 14, n: 14, shape: 'balanced', cap: 7, conc: 6.2, pool: 72, time: 120, miss: 1, pressure: 3, intro: 'Releases adapt to how you play.' },
+  { id: 15, n: 14, shape: 'long', cap: 7, conc: 6.4, pool: 90, time: 120, miss: 1, pressure: 3, intro: 'Opposite states at the same switch, closer together.' },
+  { id: 16, n: 14, shape: 'three', cap: 7, conc: 6.6, pool: 90, time: 120, miss: 1, pressure: 3, intro: 'Hold the full board until the last train.' },
 ];
 
 export function stageFor(level, rung = 0) {
   const row = LEVELS[level - 1];
   if (!row) throw new Error(`Unknown stage ${level}`);
   const tokens = TOKENS.slice(0, row.n);
-  let offered = row.offered;
-  if (row.id === 14) offered = L14_RUNGS[Math.max(0, Math.min(L14_RUNGS.length - 1, rung))];
-  const nom = Math.max(1.15, 8 / row.conc);
+  let pool = row.pool;
+  let conc = row.conc;
+  if (row.id === 14) {
+    pool = L14_RUNGS[Math.max(0, Math.min(L14_RUNGS.length - 1, rung))];
+    conc = 6.0 + rung * 0.15;
+  }
+  const gap = row.time / pool;
   const bits = row.n === 3 ? ['0', '10', '11'] : balancedBits(row.n);
   return {
-    id: row.id, n: row.n, shape: row.shape, miss: row.miss, total: offered,
-    nom, min: nom, max: nom * 1.55, cap: row.cap, conc: row.conc, pressure: row.pressure,
+    id: row.id, n: row.n, shape: row.shape, miss: row.miss, need: row.need || 0,
+    total: pool, time: row.time, intro: row.intro,
+    nom: gap, min: gap, max: gap * 1.38, cap: row.cap, conc, pressure: row.pressure,
     tokens, codes: zipCodes(tokens, bits),
     sources: [{ id: 'TUNNEL', side: 'W', packet: tokens.slice() }],
   };
@@ -238,14 +243,14 @@ function mkSw(id, prefix, x, y, inPort, out0, out1) {
 }
 function layoutTwo(nodes, edges, tokens, region) {
   const [pink, black] = tokens;
-  const j = mkSw('J:', '', 186, 428, 'W', 'N', 'S');
+  const j = mkSw('J:', '', 104, 428, 'W', 'N', 'S');
   const stP = {
     id: `ST:${pink}`, kind: 'station', color: pink,
-    x: j.x, y: region.y0 + 58, port: 'S', pulse: 0, ports: {},
+    x: j.x, y: j.y - 104, port: 'S', pulse: 0, ports: {},
   };
   const stK = {
     id: `ST:${black}`, kind: 'station', color: black,
-    x: region.x1 - 28, y: region.y1 - 72, port: 'N', pulse: 0, ports: {},
+    x: j.x + 32, y: j.y + 80, port: 'N', pulse: 0, ports: {},
   };
   nodes[j.id] = j;
   nodes[stP.id] = stP;
@@ -281,7 +286,7 @@ export function buildStage(level, rung = 0) {
       : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
-    x: root.inPort === 'W' ? 30 : root.x + DIR[root.inPort][0] * 120,
+    x: root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120,
     y: root.inPort === 'W' ? root.y : root.y + DIR[root.inPort][1] * 120,
     port: opposite(root.inPort),
     ports: {},
@@ -290,7 +295,26 @@ export function buildStage(level, rung = 0) {
   src.y = Math.max(110, Math.min(H - 110, src.y));
   nodes[src.id] = src;
   addEdge(edges, src, src.port, root, root.inPort);
-  return { nodes, edges, sources: [src], merges: [], codes: spec.codes, spec, root };
+  const graph = { nodes, edges, sources: [src], merges: [], codes: spec.codes, spec, root };
+  graph.longest = longestRouteLen(graph);
+  return graph;
+}
+
+export function longestRouteLen(graph) {
+  let max = 0;
+  const walk = (nodeId, acc, seen) => {
+    const node = graph.nodes[nodeId];
+    if (!node) return;
+    if (node.kind === 'station') { max = Math.max(max, acc); return; }
+    for (const e of graph.edges) {
+      if (e.from.nodeId !== nodeId || seen.has(e.id)) continue;
+      seen.add(e.id);
+      walk(e.to.nodeId, acc + polyLen(e.pts), seen);
+      seen.delete(e.id);
+    }
+  };
+  for (const s of graph.sources) walk(s.id, 0, new Set());
+  return max;
 }
 
 function segments(pts) {
@@ -409,6 +433,14 @@ export function validateStage(graph) {
     for (const color of source.packet) {
       const hits = outcomes.filter((o) => o.color === color);
       if (hits.length !== 1) errors.push(`${source.id}/${color}: expected 1 station, got ${hits.length}`);
+    }
+  }
+  for (const sw of switches) {
+    const hub = { x: sw.x, y: sw.y };
+    for (const e of graph.edges) {
+      if (e.from.nodeId !== sw.id && e.to.nodeId !== sw.id) continue;
+      const end = e.from.nodeId === sw.id ? e.pts[0] : e.pts[e.pts.length - 1];
+      if (hypot(end, hub) > 2.5) errors.push(`switch ${sw.id}: rail ${e.id} misses hub`);
     }
   }
   return { ok: errors.length === 0, errors };

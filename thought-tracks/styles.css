@@ -59,6 +59,7 @@ html, body {
 
 .chip b { display: block; font-size: 9px; letter-spacing: 0.12em; opacity: 0.7; }
 .chip span { font-size: 16px; font-weight: 800; }
+.chip.quiet span { font-size: 14px; font-weight: 700; opacity: 0.78; }
 
 .lives {
   font-size: 18px;

@@ -4,15 +4,14 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS,
-} from './graph.js?v=7';
+} from './graph.js?v=8';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const SAVE_KEY = 'thought-tracks-v13';
+const SAVE_KEY = 'thought-tracks-v14';
 const SPEED = 36;
 const TAP_COALESCE = 0.08;
 const HIT_R = 22;
-const SPAWN_CUTOFF = 9;
 const DECISION_HORIZON = 2.5;
 
 const ui = {
@@ -39,10 +38,11 @@ const state = {
   home: 0,
   missed: 0,
   allowed: 3,
-  quota: 8,
+  quota: 6,
   spawned: 0,
   spawnIn: 1,
-  remaining: 120,
+  remaining: 34,
+  bag: [],
   pace: 1,
   graph: null,
   trains: [],
@@ -58,7 +58,7 @@ const state = {
 };
 
 function persist() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 13, best, muted, level: state.level, rung: state.rung })); } catch {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 14, best, muted, level: state.level, rung: state.rung })); } catch {}
 }
 
 function unlockAudio() {
@@ -152,8 +152,23 @@ function firstSwitchFor(source) {
   return node?.kind === 'switch' ? node : null;
 }
 
+function shuffleBag(tokens, count) {
+  const each = Math.floor(count / tokens.length);
+  let extra = count - each * tokens.length;
+  const bag = [];
+  for (const t of tokens) {
+    for (let i = 0; i < each; i++) bag.push(t);
+    if (extra > 0) { bag.push(t); extra -= 1; }
+  }
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  return bag;
+}
+
 function pickColor(source) {
-  const spec = state.spec;
+  if (state.bag.length) return state.bag.shift();
   const used = {};
   for (const tr of state.trains) used[tr.color] = (used[tr.color] || 0) + 1;
   const ranked = source.packet.slice().sort((a, b) => (used[a] || 0) - (used[b] || 0));
@@ -179,9 +194,14 @@ function decisionPressure() {
   return state.trains.filter((tr) => nextSwitchEta(tr) <= DECISION_HORIZON).length;
 }
 
+function spawnCutoff() {
+  const travel = (state.graph?.longest || 180) / SPEED;
+  return travel + 1;
+}
+
 function canRelease(source) {
   const spec = state.spec;
-  if (state.remaining <= SPAWN_CUTOFF) return false;
+  if (state.remaining <= spawnCutoff()) return false;
   if (state.trains.length >= spec.cap) return false;
   if (decisionPressure() >= spec.pressure) return false;
   const edge = nextLiveEdge(state.graph, source);
@@ -201,6 +221,7 @@ function spawnFrom(source) {
     dist: 0,
     cars: 1,
     steam: 0,
+    committed: null,
   });
   state.spawned += 1;
   burst(source.x, source.y, '#dfe6d2', 6, { speed: 28, lift: 6, life: 0.35 });
@@ -217,11 +238,6 @@ function spawnTrain() {
 }
 
 function requestToggle(sw) {
-  if ((sw.anim || 1) < 1) {
-    sw.flash = 0.12;
-    beep(180, 0.04, 'square', 0.02);
-    return;
-  }
   sw.prevArm = sw.arm;
   sw.arm = sw.arm ? 0 : 1;
   sw.anim = 0;
@@ -241,13 +257,8 @@ function toggleSwitchAt(p) {
   }
   if (!hit) return;
   const now = performance.now() / 1000;
-  if (state.tapQueue && state.tapQueue.id === hit.id && now - state.tapQueue.t < TAP_COALESCE) {
-    state.tapQueue.n += 1;
-    state.tapQueue.t = now;
-    requestToggle(hit);
-    return;
-  }
-  state.tapQueue = { id: hit.id, t: now, n: 1 };
+  if (state.tapQueue && state.tapQueue.id === hit.id && now - state.tapQueue.t < TAP_COALESCE) return;
+  state.tapQueue = { id: hit.id, t: now };
   requestToggle(hit);
 }
 
@@ -258,9 +269,10 @@ function finishTrain(tr, station) {
   state.trains = state.trains.filter((t) => t !== tr);
   if (ok) {
     state.home += 1;
-    state.score += 100 * state.level;
+    state.score += 100 * Math.min(state.level, 14);
     state.recovery = Math.max(0, (state.recovery || 0) - 1);
-    state.pace = state.recovery > 0 ? spec.min / spec.nom : Math.max(0.85, (state.pace || 1) * 0.96);
+    state.pace = state.recovery > 0 ? spec.min / spec.nom : Math.max(0.88, (state.pace || 1) * 0.97);
+    if (state.level === 1) state.hint = 0;
     station.pulse = 0.7;
     burst(station.x, station.y - 8, accent, 12, { speed: 90, lift: 48 });
     state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.45, life: 0.45, color: accent, r: 10 });
@@ -279,13 +291,17 @@ function finishTrain(tr, station) {
 function advanceTrain(tr, dt) {
   const nodeAhead = state.graph.nodes[tr.edge.to.nodeId];
   const len = polyLen(tr.edge.pts);
+  if (nodeAhead.kind === 'switch' && !tr.committed && (len - tr.dist) <= HUB_R) {
+    tr.committed = nextLiveEdge(state.graph, nodeAhead);
+  }
   tr.dist += SPEED * dt;
   if (tr.dist < len) return;
   if (nodeAhead.kind === 'station') {
     finishTrain(tr, nodeAhead);
     return;
   }
-  const edge = nextLiveEdge(state.graph, nodeAhead);
+  const edge = tr.committed || nextLiveEdge(state.graph, nodeAhead);
+  tr.committed = null;
   if (!edge) {
     finishTrain(tr, nodeAhead);
     return;
@@ -296,7 +312,20 @@ function advanceTrain(tr, dt) {
 
 function spawnGap() {
   const s = state.spec;
-  return Math.max(s.min, Math.min(s.max, s.nom * (state.pace || 1)));
+  const recover = (state.recovery || 0) > 0 ? 1.35 : 1;
+  return Math.max(0.7, s.nom * (state.pace || 1) * recover);
+}
+
+function roundPassed() {
+  const spec = state.spec;
+  if (spec.need) return state.home >= spec.need;
+  return state.missed <= spec.miss;
+}
+
+function failWhy() {
+  const spec = state.spec;
+  if (spec.need) return `Route at least ${spec.need} of ${spec.total} correctly to advance.`;
+  return `Level ${spec.id} allows at most ${spec.miss} miss${spec.miss === 1 ? '' : 'es'}.`;
 }
 
 function endRound(advanced) {
@@ -309,10 +338,14 @@ function endRound(advanced) {
   }
   ui.done.classList.remove('hidden');
   document.getElementById('done-title').textContent = advanced ? `Level ${state.level} cleared` : 'Round over';
-  document.getElementById('done-home').textContent = String(state.home);
+  document.getElementById('done-home').textContent = `${state.home} / ${state.quota}`;
   document.getElementById('done-miss').textContent = String(state.missed);
   document.getElementById('done-score').textContent = String(state.score);
   document.getElementById('done-best').textContent = String(best);
+  const why = document.getElementById('done-why');
+  if (why) {
+    why.textContent = advanced ? (state.level < 16 ? 'Next level unlocked' : 'Mastery round complete') : failWhy();
+  }
   document.getElementById('btn-again').textContent = advanced && state.level < 16 ? 'NEXT LEVEL' : 'PLAY AGAIN';
 }
 
@@ -330,20 +363,22 @@ function startLevel(level, rung = state.rung) {
     allowed: spec.miss,
     quota: spec.total,
     spawned: 0,
-    spawnIn: level === 1 ? 1.4 : 0.9,
-    remaining: 120,
+    spawnIn: level === 1 ? 1.1 : 0.8,
+    remaining: spec.time,
     pace: 1,
     graph,
     trains: [],
     fx: [],
-    hint: level === 1 ? 3.2 : 0,
+    hint: spec.intro ? (level === 1 ? 99 : 3.4) : 0,
+    intro: spec.intro || '',
     flash: 0,
     home: 0,
-    score: level === 1 ? 0 : state.score,
+    score: 0,
     nextId: 1,
     tapQueue: null,
     recovery: 0,
     lastLaunch: 0,
+    bag: shuffleBag(spec.tokens, spec.total),
   });
   ui.title?.classList.add('hidden');
   ui.pause.classList.add('hidden');
@@ -681,12 +716,22 @@ function render() {
     ctx.fillStyle = `rgba(210,240,170,${state.flash * 0.3})`;
     ctx.fillRect(0, 0, W, H);
   }
-  if (state.hint > 0) {
+  if (state.hint > 0 && state.intro) {
     ctx.globalAlpha = Math.min(1, state.hint);
     ctx.fillStyle = '#eef3e4';
     ctx.font = '800 12px Trebuchet MS, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TAP A GREEN CIRCLE  •  MATCH THE COLOR', W / 2, 118);
+    const words = state.intro.split(' ');
+    let line = '', y = 116;
+    for (const w of words) {
+      const test = line ? `${line} ${w}` : w;
+      if (ctx.measureText(test).width > 340) {
+        ctx.fillText(line, W / 2, y);
+        line = w;
+        y += 16;
+      } else line = test;
+    }
+    if (line) ctx.fillText(line, W / 2, y);
     ctx.globalAlpha = 1;
   }
 }
@@ -694,7 +739,7 @@ function render() {
 function step(dt) {
   if (state.mode !== 'play') return;
   state.remaining = Math.max(0, state.remaining - dt);
-  state.hint = Math.max(0, state.hint - dt);
+  if (!(state.level === 1 && state.home === 0)) state.hint = Math.max(0, state.hint - dt);
   state.flash = Math.max(0, (state.flash || 0) - dt * 1.6);
   state.fx = state.fx.filter((f) => {
     f.t -= dt;
@@ -722,11 +767,11 @@ function step(dt) {
   }
 
   const spec = state.spec;
-  const cutoff = state.remaining <= SPAWN_CUTOFF;
+  const cutoff = state.remaining <= spawnCutoff();
   const doneSpawning = cutoff || state.spawned >= state.quota;
   const idle = doneSpawning && state.trains.length === 0;
   if (state.remaining <= 0 || idle) {
-    endRound(state.missed <= state.allowed && state.home > 0);
+    endRound(roundPassed());
     return;
   }
   if (!doneSpawning) {

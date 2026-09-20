@@ -19,8 +19,8 @@
   <a class="arcade-home" href="/">ALL GAMES</a>
   <canvas id="game"></canvas>
   <div class="hud" id="hud">
-    <div class="chip"><b>TIME</b><span id="hud-time">2:00</span></div>
-    <div class="chip"><b>CORRECT</b><span id="hud-correct">0 of 8</span></div>
+    <div class="chip quiet"><b>TIME</b><span id="hud-time">0:34</span></div>
+    <div class="chip"><b>CORRECT</b><span id="hud-correct">0 of 6</span></div>
   </div>
   <div class="hud bottom">
     <button id="btn-pause" aria-label="Pause">II</button>
@@ -41,8 +41,9 @@
   <div class="overlay hidden" id="done">
     <div class="card">
       <h1 id="done-title">Round over</h1>
+      <p class="hint" id="done-why"></p>
       <div class="stats">
-        <div>Home<strong id="done-home">0</strong></div>
+        <div>Correct<strong id="done-home">0 / 6</strong></div>
         <div>Missed<strong id="done-miss">0</strong></div>
         <div>Score<strong id="done-score">0</strong></div>
         <div>Best<strong id="done-best">0</strong></div>
@@ -52,6 +53,6 @@
     </div>
   </div>
 
-  <script type="module" src="./game.js?v=7"></script>
+  <script type="module" src="./game.js?v=8"></script>
 </body>
 </html>
