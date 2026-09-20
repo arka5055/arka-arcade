@@ -593,28 +593,26 @@ function renderStages() {
     num.className = 'stage-num';
     num.textContent = String(level);
     shotWrap.append(view, num);
-    card.append(shotWrap);
     if (done) {
-      const clearedTag = document.createElement('span');
-      clearedTag.className = 'tag cleared-tag';
-      clearedTag.textContent = 'CLEARED';
-      card.append(clearedTag);
+      const tick = document.createElement('span');
+      tick.className = 'cleared-tick';
+      tick.textContent = '✓';
+      shotWrap.append(tick);
     }
     if (level === lastPlayed && level <= unlocked) {
       const tag = document.createElement('span');
       tag.className = 'tag';
       tag.textContent = 'CONTINUE';
-      card.append(tag);
+      shotWrap.append(tag);
     }
-    const title = document.createElement('b');
-    title.textContent = `STAGE ${level}`;
     if (level === 8) {
       const dual = document.createElement('span');
-      dual.className = done ? 'dual-mark' : 'tag dual-tag';
-      dual.textContent = 'DUAL COLOR';
-      if (done) title.append(dual);
-      else card.append(dual);
+      dual.className = 'dual-chip';
+      dual.textContent = 'NEW · DUAL';
+      shotWrap.append(dual);
     }
+    const title = document.createElement('b');
+    title.textContent = done ? `STAGE ${level}  ✓` : `STAGE ${level}`;
     const line = document.createElement('span');
     line.className = 'meta';
     line.textContent = `${meta.stations} stations · up to ${meta.cap} trains`;
@@ -622,7 +620,7 @@ function renderStages() {
     foot.className = 'best';
     const best = rec ? rec.home : '—';
     foot.textContent = `Goal ${goalShort(stageFor(level, 0))} · Best ${best}`;
-    card.append(title, line, foot);
+    card.append(shotWrap, title, line, foot);
     card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
