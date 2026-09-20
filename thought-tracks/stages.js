@@ -1,4 +1,4 @@
-import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=29';
+import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=30';
 import { strokeCenterline, drawHub, drawBlade, trimRailToHubs } from './switch.js?v=26';
 
 const thumbs = new Map();
