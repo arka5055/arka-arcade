@@ -34,7 +34,7 @@
       "root": "thought-tracks",
       "cover": "/media/tracks.jpg",
       "tone": "#182318",
-      "score": { "key": "thought-tracks-v12", "kind": "json", "field": "best", "label": "Best" }
+      "score": { "key": "thought-tracks-v13", "kind": "json", "field": "best", "label": "Best" }
     },
     {
       "id": "infinite",

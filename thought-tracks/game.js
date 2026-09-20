@@ -1,21 +1,22 @@
 import {
-  W, H, HUB_R, MERGE_R, PALETTE, STAGE,
+  W, H, HUB_R, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
-  buildStage, validateStage, liveEdge, nextLiveEdge, DIR,
+  buildStage, validateStage, liveEdge, nextLiveEdge,
+  tokenParts, tokenLabel, stageFor, L14_RUNGS,
 } from './graph.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const SAVE_KEY = 'thought-tracks-v12';
-const SPEED = 44;
-const COMMIT_S = 0.25;
-const TAP_COALESCE = 0.1;
+const SAVE_KEY = 'thought-tracks-v13';
+const SPEED = 36;
+const TAP_COALESCE = 0.08;
 const HIT_R = 22;
+const SPAWN_CUTOFF = 9;
+const DECISION_HORIZON = 2.5;
 
 const ui = {
   time: document.getElementById('hud-time'),
   correct: document.getElementById('hud-correct'),
-  level: document.getElementById('hud-level'),
   title: document.getElementById('title'),
   pause: document.getElementById('pause'),
   done: document.getElementById('done'),
@@ -50,10 +51,13 @@ const state = {
   nextId: 1,
   tapQueue: null,
   debug: /[?&]debug=1/.test(location.search),
+  rung: 0,
+  recovery: 0,
+  lastLaunch: 0,
 };
 
 function persist() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 12, best, muted })); } catch {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 13, best, muted, level: state.level, rung: state.rung })); } catch {}
 }
 
 function unlockAudio() {
@@ -105,17 +109,33 @@ function distToNode(tr, node) {
   return Math.hypot(p.x - node.x, p.y - node.y);
 }
 
+function paintToken(ctx, token, drawPath) {
+  const parts = tokenParts(token);
+  if (parts.length === 1) {
+    ctx.fillStyle = PALETTE[parts[0]] || '#3d8f44';
+    drawPath();
+    ctx.fill();
+    return;
+  }
+  ctx.save();
+  drawPath();
+  ctx.clip();
+  ctx.fillStyle = PALETTE[parts[0]] || '#3d8f44';
+  ctx.fillRect(-22, -24, 22, 44);
+  ctx.fillStyle = PALETTE[parts[1]] || '#1c1c1c';
+  ctx.fillRect(0, -24, 22, 44);
+  ctx.restore();
+  drawPath();
+}
+
 function switchCommitted(sw) {
-  return state.trains.some((tr) => {
-    const d = distToNode(tr, sw);
-    return d < Math.max(HUB_R, SPEED * COMMIT_S) + ((tr.cars || 1) - 1) * 10;
-  });
+  return false;
 }
 
 function mergeBusy(merge, except) {
   return state.trains.some((tr) => {
     if (tr === except) return false;
-    return distToNode(tr, merge) < MERGE_R + 18 + ((tr.cars || 1) - 1) * 10;
+    return distToNode(tr, merge) < 30 + ((tr.cars || 1) - 1) * 10;
   });
 }
 
@@ -132,28 +152,39 @@ function firstSwitchFor(source) {
 }
 
 function pickColor(source) {
-  const spec = STAGE[state.level - 1];
-  const intro = spec.intro || [];
-  if (state.spawned < intro.length) {
-    const want = intro[state.spawned];
-    if (source.packet.includes(want)) return want;
-  }
+  const spec = state.spec;
   const used = {};
   for (const tr of state.trains) used[tr.color] = (used[tr.color] || 0) + 1;
   const ranked = source.packet.slice().sort((a, b) => (used[a] || 0) - (used[b] || 0));
   return ranked[0];
 }
 
+function nextSwitchEta(tr) {
+  let remain = polyLen(tr.edge.pts) - tr.dist;
+  let node = state.graph.nodes[tr.edge.to.nodeId];
+  let guard = 0;
+  while (node && guard++ < 20) {
+    if (node.kind === 'switch') return remain / SPEED;
+    if (node.kind === 'station') return Infinity;
+    const edge = nextLiveEdge(state.graph, node);
+    if (!edge) return Infinity;
+    remain += polyLen(edge.pts);
+    node = state.graph.nodes[edge.to.nodeId];
+  }
+  return Infinity;
+}
+
+function decisionPressure() {
+  return state.trains.filter((tr) => nextSwitchEta(tr) <= DECISION_HORIZON).length;
+}
+
 function canRelease(source) {
-  const spec = STAGE[state.level - 1];
+  const spec = state.spec;
+  if (state.remaining <= SPAWN_CUTOFF) return false;
   if (state.trains.length >= spec.cap) return false;
-  const sw = firstSwitchFor(source);
-  if (sw && switchCommitted(sw)) return false;
+  if (decisionPressure() >= spec.pressure) return false;
   const edge = nextLiveEdge(state.graph, source);
-  if (!edge) return false;
-  const nxt = state.graph.nodes[edge.to.nodeId];
-  if (nxt?.kind === 'merge' && mergeBusy(nxt)) return false;
-  return true;
+  return Boolean(edge);
 }
 
 function spawnFrom(source) {
@@ -167,7 +198,7 @@ function spawnFrom(source) {
     color,
     edge,
     dist: 0,
-    cars: state.level >= 12 ? 3 : state.level >= 8 ? 2 : 1,
+    cars: 1,
     steam: 0,
   });
   state.spawned += 1;
@@ -185,7 +216,7 @@ function spawnTrain() {
 }
 
 function requestToggle(sw) {
-  if (switchCommitted(sw) || (sw.anim || 1) < 1) {
+  if ((sw.anim || 1) < 1) {
     sw.flash = 0.12;
     beep(180, 0.04, 'square', 0.02);
     return;
@@ -220,28 +251,26 @@ function toggleSwitchAt(p) {
 }
 
 function finishTrain(tr, station) {
+  const spec = state.spec;
   const ok = station?.kind === 'station' && station.color === tr.color;
+  const accent = PALETTE[tokenParts(ok ? station.color : tr.color)[0]] || '#eef3e4';
   state.trains = state.trains.filter((t) => t !== tr);
   if (ok) {
     state.home += 1;
     state.score += 100 * state.level;
-    state.pace = Math.max(STAGE[state.level - 1].min / STAGE[state.level - 1].nom, (state.pace || 1) * 0.94);
+    state.recovery = Math.max(0, (state.recovery || 0) - 1);
+    state.pace = state.recovery > 0 ? spec.min / spec.nom : Math.max(0.85, (state.pace || 1) * 0.96);
     station.pulse = 0.7;
-    burst(station.x, station.y - 8, PALETTE[station.color], 12, { speed: 90, lift: 48 });
-    state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.45, life: 0.45, color: PALETTE[station.color], r: 10 });
-    state.fx.push({
-      kind: 'float', x: station.x, y: station.y - 22, t: 0.8, life: 0.8,
-      color: '#eef3e4', text: 'CORRECT', vy: -24, vx: 0,
-    });
-    state.flash = 0.16;
+    burst(station.x, station.y - 8, accent, 12, { speed: 90, lift: 48 });
+    state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.45, life: 0.45, color: accent, r: 10 });
     beep(640, 0.08, 'sine', 0.04);
   } else {
     state.missed += 1;
-    state.pace = Math.min(STAGE[state.level - 1].max / STAGE[state.level - 1].nom, (state.pace || 1) * 1.22);
+    state.recovery = 2;
+    state.pace = spec.max / spec.nom;
     const x = station?.x ?? W / 2;
     const y = station?.y ?? 400;
     burst(x, y, '#c9d2c0', 5, { speed: 24, lift: 6, life: 0.28 });
-    if (state.trains.length >= STAGE[state.level - 1].cap) state.spawnIn += spawnGap() * 0.3;
   }
   refreshHud();
 }
@@ -249,18 +278,9 @@ function finishTrain(tr, station) {
 function advanceTrain(tr, dt) {
   const nodeAhead = state.graph.nodes[tr.edge.to.nodeId];
   const len = polyLen(tr.edge.pts);
-  const remain = len - tr.dist;
-  if (nodeAhead?.kind === 'merge' && remain < MERGE_R + 10 && mergeBusy(nodeAhead, tr)) {
-    return;
-  }
   tr.dist += SPEED * dt;
   if (tr.dist < len) return;
   if (nodeAhead.kind === 'station') {
-    const leftover = tr.dist - len;
-    if (leftover < 12) {
-      finishTrain(tr, nodeAhead);
-      return;
-    }
     finishTrain(tr, nodeAhead);
     return;
   }
@@ -274,7 +294,7 @@ function advanceTrain(tr, dt) {
 }
 
 function spawnGap() {
-  const s = STAGE[state.level - 1];
+  const s = state.spec;
   return Math.max(s.min, Math.min(s.max, s.nom * (state.pace || 1)));
 }
 
@@ -282,23 +302,29 @@ function endRound(advanced) {
   if (state.score > best) { best = state.score; persist(); }
   state.mode = 'done';
   state.cleared = advanced;
+  if (advanced && state.level === 14) {
+    if (state.missed <= 1) state.rung = Math.min(L14_RUNGS.length - 1, (state.rung || 0) + 1);
+    else if (state.missed >= 4) state.rung = Math.max(0, (state.rung || 0) - 1);
+  }
   ui.done.classList.remove('hidden');
-  document.getElementById('done-title').textContent = advanced ? 'Level cleared' : 'Round over';
+  document.getElementById('done-title').textContent = advanced ? `Level ${state.level} cleared` : 'Round over';
   document.getElementById('done-home').textContent = String(state.home);
   document.getElementById('done-miss').textContent = String(state.missed);
   document.getElementById('done-score').textContent = String(state.score);
   document.getElementById('done-best').textContent = String(best);
-  document.getElementById('btn-again').textContent = advanced && state.level < 14 ? 'NEXT LEVEL' : 'PLAY AGAIN';
+  document.getElementById('btn-again').textContent = advanced && state.level < 16 ? 'NEXT LEVEL' : 'PLAY AGAIN';
 }
 
-function startLevel(level) {
-  const spec = STAGE[level - 1];
-  const graph = buildStage(level);
+function startLevel(level, rung = state.rung) {
+  const spec = stageFor(level, level === 14 ? rung : 0);
+  const graph = buildStage(level, level === 14 ? rung : 0);
   const report = validateStage(graph);
   if (!report.ok) console.warn('[tracks] map issues', report.errors);
   Object.assign(state, {
     mode: 'play',
     level,
+    rung: level === 14 ? rung : state.rung,
+    spec,
     missed: 0,
     allowed: spec.miss,
     quota: spec.total,
@@ -315,6 +341,8 @@ function startLevel(level) {
     score: level === 1 ? 0 : state.score,
     nextId: 1,
     tapQueue: null,
+    recovery: 0,
+    lastLaunch: 0,
   });
   ui.title?.classList.add('hidden');
   ui.pause.classList.add('hidden');
@@ -331,7 +359,6 @@ function formatTime(s) {
 }
 
 function refreshHud() {
-  ui.level.textContent = String(state.level);
   ui.correct.textContent = `${state.home} of ${state.quota}`;
   ui.time.textContent = formatTime(Math.max(0, state.remaining));
 }
@@ -460,22 +487,21 @@ function drawStation(st) {
   ctx.stroke();
   ctx.translate(st.x + off.x, st.y + off.y);
   if (st.pulse > 0) {
-    ctx.shadowColor = PALETTE[st.color];
+    ctx.shadowColor = PALETTE[tokenParts(st.color)[0]] || '#eef3e4';
     ctx.shadowBlur = 16;
   }
   ctx.lineJoin = 'round';
   ctx.lineWidth = 2.8;
   ctx.strokeStyle = '#f3f6ee';
-  ctx.fillStyle = PALETTE[st.color];
-  roundRect(-15, -9, 30, 22, 4);
-  ctx.fill();
+  paintToken(ctx, st.color, () => roundRect(-15, -9, 30, 22, 4));
   ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(-17, -7);
-  ctx.lineTo(0, -20);
-  ctx.lineTo(17, -7);
-  ctx.closePath();
-  ctx.fill();
+  paintToken(ctx, st.color, () => {
+    ctx.beginPath();
+    ctx.moveTo(-17, -7);
+    ctx.lineTo(0, -20);
+    ctx.lineTo(17, -7);
+    ctx.closePath();
+  });
   ctx.stroke();
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#f7f4ea';
@@ -483,10 +509,10 @@ function drawStation(st) {
   ctx.arc(0, 4, 8, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#1c2818';
-  ctx.font = '800 11px Trebuchet MS, sans-serif';
+  ctx.font = '800 10px Trebuchet MS, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(st.color, 0, 4);
+  ctx.fillText(tokenLabel(st.color), 0, 4);
   ctx.restore();
 }
 
@@ -514,12 +540,12 @@ function drawMerge(m) {
   ctx.translate(m.x, m.y);
   ctx.fillStyle = '#2a3324';
   ctx.beginPath();
-  ctx.arc(0, 0, MERGE_R - 1, 0, Math.PI * 2);
+  ctx.arc(0, 0, 11, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = '#d7ddc8';
   ctx.lineWidth = 2;
   ctx.stroke();
-  const waiting = state.trains.filter((tr) => distToNode(tr, m) < MERGE_R + 24).length;
+  const waiting = state.trains.filter((tr) => distToNode(tr, m) < 36).length;
   if (waiting) {
     ctx.fillStyle = '#e7ead8';
     ctx.beginPath();
@@ -539,12 +565,11 @@ function drawLoco(tr) {
     ctx.lineJoin = 'round';
     ctx.strokeStyle = '#f3f6ee';
     ctx.lineWidth = 2.6;
-    ctx.fillStyle = PALETTE[tr.color];
     if (i === 0) {
-      roundRect(-13, -7, 24, 14, 3);
-      ctx.fill(); ctx.stroke();
-      roundRect(4, -14, 7, 8, 2);
-      ctx.fill(); ctx.stroke();
+      paintToken(ctx, tr.color, () => roundRect(-13, -7, 24, 14, 3));
+      ctx.stroke();
+      paintToken(ctx, tr.color, () => roundRect(4, -14, 7, 8, 2));
+      ctx.stroke();
       ctx.fillStyle = '#1c2418';
       ctx.fillRect(9, -18, 3, 5);
       ctx.beginPath();
@@ -559,7 +584,7 @@ function drawLoco(tr) {
       ctx.font = '800 8px Trebuchet MS, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(tr.color, -1, 0);
+      ctx.fillText(tokenLabel(tr.color), -1, 0);
     } else {
       roundRect(-9, -6, 16, 12, 3);
       ctx.fill(); ctx.stroke();
@@ -640,7 +665,7 @@ function render() {
     ctx.fillStyle = '#eef3e4';
     ctx.font = '800 12px Trebuchet MS, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('TAP A GREEN CIRCLE  •  MATCH THE LETTER', W / 2, 36);
+    ctx.fillText('TAP A GREEN CIRCLE  •  MATCH THE COLOR', W / 2, 118);
     ctx.globalAlpha = 1;
   }
 }
@@ -675,8 +700,9 @@ function step(dt) {
     }
   }
 
-  const spec = STAGE[state.level - 1];
-  const doneSpawning = state.spawned >= state.quota;
+  const spec = state.spec;
+  const cutoff = state.remaining <= SPAWN_CUTOFF;
+  const doneSpawning = cutoff || state.spawned >= state.quota;
   const idle = doneSpawning && state.trains.length === 0;
   if (state.remaining <= 0 || idle) {
     endRound(state.missed <= state.allowed && state.home > 0);
@@ -686,7 +712,7 @@ function step(dt) {
     state.spawnIn -= dt;
     if (state.spawnIn <= 0) {
       if (spawnTrain()) state.spawnIn = spawnGap();
-      else state.spawnIn = 0.2;
+      else state.spawnIn = 0.18;
     }
   }
   const ordered = [...state.trains].sort((a, b) => a.id - b.id);
@@ -722,7 +748,7 @@ function restartGame(ev) {
 document.getElementById('btn-again').addEventListener('click', () => {
   unlockAudio();
   ui.done.classList.add('hidden');
-  if (state.cleared && state.level < 14) startLevel(state.level + 1);
+  if (state.cleared && state.level < 16) startLevel(state.level + 1);
   else startGame();
 });
 document.getElementById('btn-restart').addEventListener('pointerdown', restartGame);
