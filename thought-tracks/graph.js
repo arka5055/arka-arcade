@@ -195,20 +195,20 @@ function stationOnFarEdge(region, inDir, color) {
   return { id: `ST:${color}`, kind: 'station', color, x, y, port: inDir, pulse: 0, ports: {} };
 }
 function splitForIncoming(inDir, region, sw, n0, n1) {
-  const gap = 10, minShare = 64;
+  const gap = 40, minShare = 110;
   const horiz = inDir === 'N' || inDir === 'S';
   const span = horiz ? region.x1 - region.x0 : region.y1 - region.y0;
   let share = span * (n0 / (n0 + n1));
   if (span > minShare * 2) share = Math.max(minShare, Math.min(span - minShare, share));
   if (horiz) {
     const mid = region.x0 + share;
-    const y0 = inDir === 'N' ? sw.y + 44 : region.y0;
-    const y1 = inDir === 'N' ? region.y1 : sw.y - 44;
+    const y0 = inDir === 'N' ? sw.y + 80 : region.y0;
+    const y1 = inDir === 'N' ? region.y1 : sw.y - 80;
     return { r0: { x0: region.x0, y0, x1: mid - gap / 2, y1 }, r1: { x0: mid + gap / 2, y0, x1: region.x1, y1 }, out0: 'W', out1: 'E' };
   }
   const mid = region.y0 + share;
-  const x0 = inDir === 'W' ? sw.x + 44 : region.x0;
-  const x1 = inDir === 'W' ? region.x1 : sw.x - 44;
+  const x0 = inDir === 'W' ? sw.x + 80 : region.x0;
+  const x1 = inDir === 'W' ? region.x1 : sw.x - 80;
   return { r0: { x0, y0: region.y0, x1, y1: mid - gap / 2 }, r1: { x0, y0: mid + gap / 2, x1, y1: region.y1 }, out0: 'N', out1: 'S' };
 }
 function layoutPrefix(prefix, region, inDir, nodes, edges, codes) {
@@ -218,15 +218,12 @@ function layoutPrefix(prefix, region, inDir, nodes, edges, codes) {
     nodes[st.id] = st;
     return st;
   }
-  const sw = {
-    id: `J:${prefix}`, kind: 'switch', prefix,
-    x: (region.x0 + region.x1) / 2, y: (region.y0 + region.y1) / 2,
-    arm: 0, prevArm: 0, anim: 1, flash: 0, ports: {}, inPort: inDir, out0: 'W', out1: 'E',
-  };
-  if (inDir === 'N') { sw.x = (region.x0 + region.x1) / 2; sw.y = region.y0 + 26; }
-  else if (inDir === 'S') { sw.x = (region.x0 + region.x1) / 2; sw.y = region.y1 - 26; }
-  else if (inDir === 'W') { sw.x = region.x0 + (prefix === '' ? 118 : 26); sw.y = (region.y0 + region.y1) / 2; }
-  else { sw.x = region.x1 - 26; sw.y = (region.y0 + region.y1) / 2; }
+  const sw = mkSw(`J:${prefix}`, prefix, (region.x0 + region.x1) / 2, (region.y0 + region.y1) / 2, inDir, 'W', 'E');
+  if (prefix === '' && inDir === 'W') sw.x = region.x0 + 108;
+  else if (inDir === 'N') sw.y = Math.min(sw.y, region.y0 + Math.max(70, (region.y1 - region.y0) * 0.38));
+  else if (inDir === 'S') sw.y = Math.max(sw.y, region.y1 - Math.max(70, (region.y1 - region.y0) * 0.38));
+  else if (inDir === 'W') sw.x = Math.min(sw.x, region.x0 + Math.max(70, (region.x1 - region.x0) * 0.38));
+  else sw.x = Math.max(sw.x, region.x1 - Math.max(70, (region.x1 - region.x0) * 0.38));
   nodes[sw.id] = sw;
   const n0 = leafCount(codes, `${prefix}0`);
   const n1 = leafCount(codes, `${prefix}1`);
@@ -277,6 +274,26 @@ function layoutThree(nodes, edges, tokens, region) {
   addEdge(edges, j2, 'E', stC, 'W');
   return j1;
 }
+function layoutFour(nodes, edges, tokens, region) {
+  const [pink, black, green, yellow] = tokens;
+  const cx = 168;
+  const j1 = mkSw('J:', '', cx, 428, 'W', 'N', 'S');
+  const j2 = mkSw('J:0', '0', cx, 248, 'S', 'N', 'E');
+  const j3 = mkSw('J:1', '1', cx, 608, 'N', 'S', 'E');
+  const stP = { id: `ST:${pink}`, kind: 'station', color: pink, x: cx, y: region.y0 + 28, port: 'S', pulse: 0, ports: {} };
+  const stK = { id: `ST:${black}`, kind: 'station', color: black, x: region.x1 - 22, y: j2.y, port: 'W', pulse: 0, ports: {} };
+  const stG = { id: `ST:${green}`, kind: 'station', color: green, x: cx, y: region.y1 - 24, port: 'N', pulse: 0, ports: {} };
+  const stY = { id: `ST:${yellow}`, kind: 'station', color: yellow, x: region.x1 - 22, y: j3.y, port: 'W', pulse: 0, ports: {} };
+  nodes[j1.id] = j1; nodes[j2.id] = j2; nodes[j3.id] = j3;
+  nodes[stP.id] = stP; nodes[stK.id] = stK; nodes[stG.id] = stG; nodes[stY.id] = stY;
+  addEdge(edges, j1, 'N', j2, 'S');
+  addEdge(edges, j1, 'S', j3, 'N');
+  addEdge(edges, j2, 'N', stP, 'S');
+  addEdge(edges, j2, 'E', stK, 'W');
+  addEdge(edges, j3, 'S', stG, 'N');
+  addEdge(edges, j3, 'E', stY, 'W');
+  return j1;
+}
 function playRegion() { return { x0: 28, y0: 132, x1: 362, y1: 708 }; }
 
 export function buildStage(level, rung = 0) {
@@ -287,7 +304,9 @@ export function buildStage(level, rung = 0) {
     ? layoutTwo(nodes, edges, spec.tokens, region)
     : spec.n === 3
       ? layoutThree(nodes, edges, spec.tokens, region)
-      : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
+      : spec.n === 4
+        ? layoutFour(nodes, edges, spec.tokens, region)
+        : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
     x: root.inPort === 'W' ? 36 : root.x + DIR[root.inPort][0] * 120,
@@ -437,6 +456,12 @@ export function validateStage(graph) {
     for (const color of source.packet) {
       const hits = outcomes.filter((o) => o.color === color);
       if (hits.length !== 1) errors.push(`${source.id}/${color}: expected 1 station, got ${hits.length}`);
+    }
+  }
+  for (let i = 0; i < switches.length; i++) {
+    for (let j = i + 1; j < switches.length; j++) {
+      const d = hypot(switches[i], switches[j]);
+      if (d < HUB_R * 2 - 1) errors.push(`hubs overlap: ${switches[i].id} x ${switches[j].id} (${d | 0}px)`);
     }
   }
   for (const sw of switches) errors.push(...assertSwitchGeometry(sw, graph.edges));
