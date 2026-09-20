@@ -6,11 +6,11 @@ import {
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
 } from './graph.js?v=9';
 import {
-  clipOutsideHubs, HIT_R,
+  HIT_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=19';
-import { thumbnail, stageMeta } from './stages.js?v=11';
+} from './switch.js?v=20';
+import { thumbnail, stageMeta } from './stages.js?v=12';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -853,10 +853,7 @@ function render() {
   const g = state.graph;
   if (!g) return;
   const switches = Object.values(g.nodes).filter((n) => n.kind === 'switch');
-  ctx.save();
-  clipOutsideHubs(ctx, switches, 0, 0, W, H);
   for (const e of g.edges) strokeRail(e.pts, true);
-  ctx.restore();
   for (const n of switches) drawHub(ctx, n);
   for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);

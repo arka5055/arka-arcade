@@ -1,5 +1,5 @@
 import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=9';
-import { strokeCenterline, HUB_R, clipOutsideHubs, drawHub, drawBlade } from './switch.js?v=19';
+import { strokeCenterline, drawHub, drawBlade } from './switch.js?v=20';
 
 const thumbs = new Map();
 
@@ -28,12 +28,9 @@ export function paintThumbnail(canvas, graph) {
   const s = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
   ctx.setTransform(s, 0, 0, s, (w - bw * s) / 2 - minX * s, (h - bh * s) / 2 - minY * s);
   const switches = Object.values(graph.nodes).filter((n) => n.kind === 'switch');
-  ctx.save();
-  clipOutsideHubs(ctx, switches, minX - 80, minY - 80, bw + 160, bh + 160);
   for (const e of graph.edges) {
     strokeCenterline(ctx, e.pts, { width: 16, sleepers: false, cap: 'butt' });
   }
-  ctx.restore();
   for (const n of switches) drawHub(ctx, n);
   for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(graph.nodes)) {

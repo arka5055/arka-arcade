@@ -153,10 +153,10 @@ export function strokeCenterline(ctx, pts, opts = {}) {
 export function drawHub(ctx, sw) {
   ctx.beginPath();
   ctx.arc(sw.x, sw.y, HUB_R + (sw.flash || 0) * 6, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(82, 148, 78, 0.62)';
+  ctx.fillStyle = '#4c7c48';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(238,243,228,0.9)';
-  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = '#e8eedc';
+  ctx.lineWidth = 2.6;
   ctx.stroke();
 }
 
