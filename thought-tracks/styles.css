@@ -52,8 +52,9 @@ html, body {
 .chip {
   background: rgba(18, 32, 18, 0.55);
   border-radius: 10px;
-  padding: 6px 10px;
-  min-width: 72px;
+  padding: 6px 8px;
+  min-width: 0;
+  flex: 1;
   text-align: center;
 }
 

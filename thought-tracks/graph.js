@@ -20,6 +20,10 @@ export function tokenLabel(token) {
   const p = tokenParts(token);
   return p.length === 1 ? p[0] : `${p[0]}/${p[1]}`;
 }
+export function goalLine(spec) {
+  if (spec.need) return `${spec.need} of ${spec.total}`;
+  return `≤${spec.miss} miss${spec.miss === 1 ? '' : 'es'}`;
+}
 
 function balancedBits(n) {
   const out = [];

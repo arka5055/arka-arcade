@@ -3,10 +3,10 @@ import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
-  tokenParts, tokenLabel, stageFor, L14_RUNGS,
+  tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
 } from './graph.js?v=9';
 import {
-  HUB_R, HIT_R, COMMIT_PAD,
+  HUB_R, HIT_R,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
 } from './switch.js?v=9';
@@ -16,12 +16,13 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const SAVE_KEY = 'thought-tracks-v14';
 const SPEED = 36;
-const TAP_COALESCE = 0.08;
+const TAP_COALESCE = 0.04;
 const DECISION_HORIZON = 2.5;
 
 const ui = {
   time: document.getElementById('hud-time'),
   correct: document.getElementById('hud-correct'),
+  goal: document.getElementById('hud-goal'),
   title: document.getElementById('title'),
   pause: document.getElementById('pause'),
   done: document.getElementById('done'),
@@ -113,6 +114,23 @@ function burst(x, y, color, n = 10, extra = {}) {
       color, r: extra.r || 2 + Math.random() * 3, text: extra.text,
     });
   }
+}
+
+function chime(ok) {
+  if (muted || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  const notes = ok ? [523, 784, 1046] : [220, 164];
+  notes.forEach((freq, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = ok ? 'sine' : 'triangle';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(ok ? 0.045 : 0.03, t + i * 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.06 + 0.16);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t + i * 0.06);
+    o.stop(t + i * 0.06 + 0.18);
+  });
 }
 
 function puff(x, y, color, life = 0.45) {
@@ -283,9 +301,9 @@ function requestToggle(sw) {
   sw.prevArm = sw.arm;
   sw.arm = sw.arm ? 0 : 1;
   sw.anim = 0;
-  sw.flash = 0.28;
-  burst(sw.x, sw.y, '#d7f0c8', 8, { speed: 70, lift: 12, life: 0.28, r: 2 });
-  beep(370, 0.05, 'square', 0.03);
+  sw.flash = 0.45;
+  burst(sw.x, sw.y, '#e7f6d4', 10, { speed: 90, lift: 8, life: 0.22, r: 2.2 });
+  beep(420, 0.04, 'square', 0.035);
 }
 
 function toggleSwitchAt(p) {
@@ -308,24 +326,33 @@ function finishTrain(tr, station) {
   const spec = state.spec;
   const ok = station?.kind === 'station' && station.color === tr.color;
   const accent = PALETTE[tokenParts(ok ? station.color : tr.color)[0]] || '#eef3e4';
+  const pts = 100 * Math.min(state.level, 14);
   state.trains = state.trains.filter((t) => t !== tr);
   if (ok) {
     state.home += 1;
-    state.score += 100 * Math.min(state.level, 14);
+    state.score += pts;
     state.recovery = Math.max(0, (state.recovery || 0) - 1);
     state.pace = state.recovery > 0 ? spec.min / spec.nom : Math.max(0.88, (state.pace || 1) * 0.97);
     if (state.level === 1) state.hint = 0;
-    station.pulse = 0.7;
-    burst(station.x, station.y - 8, accent, 12, { speed: 90, lift: 48 });
-    state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.45, life: 0.45, color: accent, r: 10 });
-    beep(640, 0.08, 'sine', 0.04);
+    station.pulse = 1.1;
+    burst(station.x, station.y - 10, accent, 18, { speed: 120, lift: 70, life: 0.7, r: 3 });
+    state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.55, life: 0.55, color: accent, r: 12 });
+    state.fx.push({ kind: 'ring', x: station.x, y: station.y, t: 0.7, life: 0.7, color: '#eef3e4', r: 6 });
+    state.fx.push({
+      kind: 'float', x: station.x, y: station.y - 18, t: 0.9, life: 0.9,
+      color: '#f7f4ea', text: `+${pts}`, vy: -46,
+    });
+    state.flash = 0.28;
+    chime(true);
   } else {
     state.missed += 1;
     state.recovery = 2;
     state.pace = spec.max / spec.nom;
     const x = station?.x ?? W / 2;
     const y = station?.y ?? 400;
-    burst(x, y, '#c9d2c0', 5, { speed: 24, lift: 6, life: 0.28 });
+    burst(x, y, '#c9d2c0', 8, { speed: 36, lift: 10, life: 0.35 });
+    state.fx.push({ kind: 'float', x, y: y - 12, t: 0.7, life: 0.7, color: '#e8d6d0', text: 'miss', vy: -24 });
+    chime(false);
   }
   refreshHud();
 }
@@ -333,11 +360,6 @@ function finishTrain(tr, station) {
 function advanceTrain(tr, dt) {
   const nodeAhead = state.graph.nodes[tr.edge.to.nodeId];
   const len = polyLen(tr.edge.pts);
-  if (!tr.edge.hub && nodeAhead?.kind === 'switch' && !tr.committedEdge && (len - tr.dist) <= COMMIT_PAD) {
-    tr.committedArm = nodeAhead.arm;
-    tr.committedEdge = nextLiveEdge(state.graph, nodeAhead);
-    tr.hubPts = committedHub(nodeAhead);
-  }
   tr.dist += SPEED * dt;
   if (tr.dist < len) return;
   if (tr.edge.hub) {
@@ -351,13 +373,15 @@ function advanceTrain(tr, dt) {
     finishTrain(tr, nodeAhead);
     return;
   }
-  if (nodeAhead.kind === 'switch' && tr.hubPts) {
+  if (nodeAhead.kind === 'switch') {
+    tr.committedArm = nodeAhead.arm;
+    tr.committedEdge = nextLiveEdge(state.graph, nodeAhead);
+    tr.hubPts = committedHub(nodeAhead);
     tr.edge = { pts: tr.hubPts, hub: true, from: { nodeId: nodeAhead.id }, to: { nodeId: nodeAhead.id } };
     tr.dist = 0;
     return;
   }
-  const edge = tr.committedEdge || nextLiveEdge(state.graph, nodeAhead);
-  tr.committedEdge = null;
+  const edge = nextLiveEdge(state.graph, nodeAhead);
   if (!edge) {
     finishTrain(tr, nodeAhead);
     return;
@@ -411,7 +435,7 @@ function endRound(advanced) {
   document.getElementById('done-best').textContent = String(best);
   const why = document.getElementById('done-why');
   if (why) {
-    why.textContent = advanced ? 'Stage cleared' : failWhy();
+    why.textContent = advanced ? `Goal met · ${goalLine(state.spec)}` : failWhy();
   }
   document.getElementById('btn-again').textContent = advanced && state.level < 16 ? 'NEXT LEVEL' : 'PLAY AGAIN';
 }
@@ -499,7 +523,10 @@ function renderStages() {
     const bestLine = document.createElement('span');
     bestLine.className = 'best';
     bestLine.textContent = rec ? `Best: ${rec.home} / ${rec.quota}` : 'Best: —';
-    card.append(title, stations, trains, bestLine);
+    const goal = document.createElement('span');
+    goal.className = 'meta';
+    goal.textContent = `Goal: ${goalLine(stageFor(level, 0))}`;
+    card.append(title, stations, trains, goal, bestLine);
     card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
@@ -543,6 +570,7 @@ function formatTime(s) {
 function refreshHud() {
   ui.correct.textContent = `${state.home} of ${state.quota}`;
   ui.time.textContent = formatTime(Math.max(0, state.remaining));
+  if (ui.goal && state.spec) ui.goal.textContent = goalLine(state.spec);
 }
 
 function resize() {
@@ -816,7 +844,7 @@ function step(dt) {
   if (state.graph) {
     for (const n of Object.values(state.graph.nodes)) {
       if (n.kind === 'switch') {
-        n.anim = Math.min(1, (n.anim ?? 1) + dt / 0.14);
+        n.anim = Math.min(1, (n.anim ?? 1) + dt / 0.08);
         n.flash = Math.max(0, (n.flash || 0) - dt * 3);
       }
       if (n.kind === 'station') n.pulse = Math.max(0, (n.pulse || 0) - dt);

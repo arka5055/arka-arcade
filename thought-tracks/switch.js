@@ -1,8 +1,8 @@
 /** Canonical turnout: one pivot, three ports, a blade that trains follow. */
 
 export const HUB_R = 28;
-export const HIT_R = 32;
-export const COMMIT_PAD = 14;
+export const HIT_R = 48;
+export const COMMIT_PAD = 2;
 
 export const PORT_ANG = {
   E: 0, SE: Math.PI / 4, S: Math.PI / 2, SW: Math.PI * 0.75,

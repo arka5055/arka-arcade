@@ -16,10 +16,6 @@ function simTrain(graph, sw, arm, dt = 1 / 60, speed = 36) {
   while (hops++ < 4000) {
     const node = graph.nodes[edge.to.nodeId];
     const len = polyLen(edge.pts);
-    if (!edge.hub && node?.kind === 'switch' && !committed && (len - dist) <= 14) {
-      committed = nextLiveEdge(graph, node);
-      hubPts = committedHub(node);
-    }
     dist += speed * dt;
     if (dist < len) continue;
     if (edge.hub) {
@@ -29,7 +25,9 @@ function simTrain(graph, sw, arm, dt = 1 / 60, speed = 36) {
       continue;
     }
     if (node.kind === 'station') return node.color;
-    if (node.kind === 'switch' && hubPts) {
+    if (node.kind === 'switch') {
+      committed = nextLiveEdge(graph, node);
+      hubPts = committedHub(node);
       edge = { pts: hubPts, hub: true, to: { nodeId: node.id } };
       dist = 0;
       continue;
