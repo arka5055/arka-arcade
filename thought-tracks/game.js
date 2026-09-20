@@ -32,18 +32,20 @@ const ui = {
 let audioCtx = null;
 let muted = false;
 let best = 0;
-let unlocked = 1;
+let unlocked = 16;
 let lastPlayed = 1;
 let records = {};
+let cleared = {};
 let stagesReturn = 'play';
 let savedRung = 0;
 try {
   const save = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
   best = save.best || 0;
   muted = !!save.muted;
-  unlocked = Math.max(1, Math.min(16, save.unlocked || 1));
+  unlocked = 16;
   lastPlayed = Math.max(1, Math.min(16, save.last || save.level || 1));
   records = save.records && typeof save.records === 'object' ? save.records : {};
+  cleared = save.cleared && typeof save.cleared === 'object' ? save.cleared : {};
   savedRung = save.rung || 0;
 } catch {}
 
@@ -76,7 +78,7 @@ const state = {
 function persist() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      version: 15, best, muted, unlocked, last: lastPlayed, rung: state.rung, records,
+      version: 16, best, muted, unlocked: 16, last: lastPlayed, rung: state.rung, records, cleared,
     }));
   } catch {}
 }
@@ -386,9 +388,12 @@ function endRound(advanced) {
   if (state.score > best) best = state.score;
   const rec = records[state.level];
   if (!rec || state.home > rec.home || (state.home === rec.home && state.score > (rec.score || 0))) {
-    records[state.level] = { home: state.home, quota: state.quota, score: state.score };
+    records[state.level] = { home: state.home, quota: state.quota, score: state.score, cleared: !!(rec && rec.cleared) };
   }
-  if (advanced) unlocked = Math.max(unlocked, Math.min(16, state.level + 1));
+  if (advanced) {
+    cleared[state.level] = true;
+    records[state.level] = { ...(records[state.level] || {}), home: Math.max(state.home, records[state.level]?.home || 0), quota: state.quota, score: Math.max(state.score, records[state.level]?.score || 0), cleared: true };
+  }
   lastPlayed = state.level;
   persist();
   state.mode = 'done';
@@ -406,7 +411,7 @@ function endRound(advanced) {
   document.getElementById('done-best').textContent = String(best);
   const why = document.getElementById('done-why');
   if (why) {
-    why.textContent = advanced ? (state.level < 16 ? 'Next level unlocked' : 'Mastery round complete') : failWhy();
+    why.textContent = advanced ? 'Stage cleared' : failWhy();
   }
   document.getElementById('btn-again').textContent = advanced && state.level < 16 ? 'NEXT LEVEL' : 'PLAY AGAIN';
 }
@@ -450,33 +455,38 @@ function startLevel(level, rung = state.rung) {
   refreshHud();
 }
 
-function startGame() { startLevel(Math.min(lastPlayed, unlocked) || 1); }
+function startGame() { startLevel(lastPlayed || 1); }
+
+function trainLabel(n) { return n === 1 ? '1 train' : `${n} trains`; }
 
 function renderStages() {
-  const continueAt = unlocked;
-  document.getElementById('stages-continue').textContent =
-    `Highest unlocked: Level ${continueAt}. Tap any open stage.`;
+  document.getElementById('stages-continue').textContent = 'Tap any stage. Cleared maps stay marked.';
   ui.grid.replaceChildren();
   for (let level = 1; level <= 16; level++) {
     const meta = stageMeta(level);
     const rec = records[level];
-    const locked = level > unlocked;
+    const done = !!(cleared[level] || rec?.cleared);
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = `stage-card${locked ? ' locked' : ''}${level === continueAt ? ' continue' : ''}`;
-    card.disabled = locked;
-    card.setAttribute('aria-label', locked ? `Level ${level} locked` : `Level ${level}`);
+    card.className = `stage-card${done ? ' cleared' : ''}${level === lastPlayed ? ' continue' : ''}`;
+    card.setAttribute('aria-label', done ? `Level ${level} cleared` : `Level ${level}`);
     const shot = thumbnail(level);
     const view = document.createElement('canvas');
     view.width = shot.width;
     view.height = shot.height;
     view.getContext('2d').drawImage(shot, 0, 0);
     card.append(view);
-    if (level === continueAt && !locked) {
+    if (level === lastPlayed) {
       const tag = document.createElement('span');
       tag.className = 'tag';
       tag.textContent = 'CONTINUE';
       card.append(tag);
+    }
+    if (done) {
+      const mark = document.createElement('span');
+      mark.className = 'cleared-mark';
+      mark.textContent = 'CLEARED';
+      card.append(mark);
     }
     const title = document.createElement('b');
     title.textContent = `LEVEL ${level}`;
@@ -485,12 +495,12 @@ function renderStages() {
     stations.textContent = `${meta.stations} stations`;
     const trains = document.createElement('span');
     trains.className = 'meta';
-    trains.textContent = `up to ${meta.cap} trains`;
+    trains.textContent = `up to ${trainLabel(meta.cap)}`;
     const bestLine = document.createElement('span');
     bestLine.className = 'best';
     bestLine.textContent = rec ? `Best: ${rec.home} / ${rec.quota}` : 'Best: —';
     card.append(title, stations, trains, bestLine);
-    if (!locked) card.addEventListener('click', () => pickStage(level));
+    card.addEventListener('click', () => pickStage(level));
     ui.grid.append(card);
   }
 }
@@ -518,7 +528,6 @@ function closeStages() {
 }
 
 function pickStage(level) {
-  if (level > unlocked) return;
   ui.stages.classList.add('hidden');
   ui.pause.classList.add('hidden');
   ui.done.classList.add('hidden');
