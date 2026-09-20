@@ -104,11 +104,11 @@ function paint(catalog) {
   const list = document.querySelector(".games");
   const resumeSlot = document.querySelector(".resume-slot");
 
-  document.title = `${catalog.product} — ${catalog.studio}`;
+  document.title = catalog.product;
   if (kicker) kicker.textContent = catalog.studio;
   if (title) title.textContent = catalog.product;
   if (lede) lede.textContent = catalog.tagline;
-  if (stamp) stamp.textContent = `${catalog.studio} · ${catalog.games.length} games`;
+  if (stamp) stamp.textContent = `${catalog.product} · ${catalog.games.length} games`;
   if (resumeSlot) {
     resumeSlot.replaceChildren();
     if (resumeId && byId[resumeId]) resumeSlot.append(resumeBar(byId[resumeId]));

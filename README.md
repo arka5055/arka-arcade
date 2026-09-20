@@ -1,4 +1,4 @@
-# ARKA Arcade
+# My Arkade
 
 One studio. One repo. One launcher.
 

@@ -2,7 +2,7 @@
 
 A divided-attention train routing game inspired by Lumosity **Train of Thought**.
 
-This game lives in the ARKA Arcade monorepo.
+This game lives in the My Arkade monorepo.
 
 **Source:** [github.com/arka5055/arka-arcade](https://github.com/arka5055/arka-arcade) (`thought-tracks/`)
 
