@@ -4,13 +4,13 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine,
-} from './graph.js?v=23';
+} from './graph.js?v=24';
 import {
-  HIT_R, HUB_R,
+  HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
   committedHub,
-} from './switch.js?v=23';
-import { thumbnail, stageMeta } from './stages.js?v=14';
+} from './switch.js?v=24';
+import { thumbnail, stageMeta } from './stages.js?v=15';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -853,7 +853,7 @@ function render() {
   const g = state.graph;
   if (!g) return;
   const switches = Object.values(g.nodes).filter((n) => n.kind === 'switch');
-  for (const e of g.edges) strokeRail(e.pts, true);
+  for (const e of g.edges) strokeRail(trimRailToHubs(e.pts, switches), true);
   for (const n of switches) drawHub(ctx, n);
   for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);

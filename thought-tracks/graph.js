@@ -1,4 +1,4 @@
-import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry } from './switch.js?v=23';
+import { HUB_R, DIR, PORT_ANG, opposite, hypot, switchPort, assertSwitchGeometry, trimRailToHubs } from './switch.js?v=24';
 
 export const W = 390;
 export const H = 844;
@@ -405,6 +405,8 @@ export function buildStage(level, rung = 0) {
   const graph = { nodes, edges, sources: [src], merges: [], codes: spec.codes, spec, root };
   separateHubs(graph);
   syncSwitchPorts(graph);
+  const switches = Object.values(graph.nodes).filter((n) => n.kind === 'switch');
+  for (const e of graph.edges) e.pts = trimRailToHubs(e.pts, switches);
   graph.longest = longestRouteLen(graph);
   return graph;
 }

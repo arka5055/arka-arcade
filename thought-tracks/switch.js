@@ -37,33 +37,77 @@ function angNorm(a) {
   return a;
 }
 
-export function hubCurveFromAngles(sw, angA, angB, steps = 14) {
+export function hubCurveFromAngles(sw, angA, angB, steps = 16) {
   const c = { x: sw.x, y: sw.y };
   const a = { x: c.x + Math.cos(angA) * HUB_R, y: c.y + Math.sin(angA) * HUB_R };
   const b = { x: c.x + Math.cos(angB) * HUB_R, y: c.y + Math.sin(angB) * HUB_R };
-  const delta = angNorm(angB - angA);
-  if (Math.abs(Math.abs(delta) - Math.PI) < 0.2) return [a, c, b];
   const ua = { x: Math.cos(angA), y: Math.sin(angA) };
   const ub = { x: Math.cos(angB), y: Math.sin(angB) };
-  const r = FILLET_R;
-  const tA = { x: c.x + ua.x * r, y: c.y + ua.y * r };
-  const tB = { x: c.x + ub.x * r, y: c.y + ub.y * r };
-  const f = { x: c.x + ua.x * r + ub.x * r, y: c.y + ua.y * r + ub.y * r };
-  const rf = hypot(tA, f);
-  const pts = [a];
-  if (hypot(a, tA) > 1.2) pts.push(tA);
-  if (rf > 2) {
-    const a0 = Math.atan2(tA.y - f.y, tA.x - f.x);
-    const a1 = Math.atan2(tB.y - f.y, tB.x - f.x);
-    const sweep = angNorm(a1 - a0);
-    for (let i = 1; i < steps; i++) {
-      const ang = a0 + sweep * (i / steps);
-      pts.push({ x: f.x + Math.cos(ang) * rf, y: f.y + Math.sin(ang) * rf });
-    }
+  const bx = ua.x + ub.x;
+  const by = ua.y + ub.y;
+  const bl = Math.hypot(bx, by);
+  let ctrl;
+  if (bl < 0.28) {
+    ctrl = { x: c.x - ua.y * HUB_R * 0.22, y: c.y + ua.x * HUB_R * 0.22 };
+  } else {
+    ctrl = { x: c.x + (bx / bl) * HUB_R * 0.32, y: c.y + (by / bl) * HUB_R * 0.32 };
   }
-  if (hypot(tB, b) > 1.2) pts.push(tB);
+  const pts = [a];
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const u = 1 - t;
+    pts.push({
+      x: u * u * a.x + 2 * u * t * ctrl.x + t * t * b.x,
+      y: u * u * a.y + 2 * u * t * ctrl.y + t * t * b.y,
+    });
+  }
   pts.push(b);
   return pts;
+}
+
+function hitCircle(a, b, sw, r) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const fx = a.x - sw.x;
+  const fy = a.y - sw.y;
+  const A = dx * dx + dy * dy;
+  if (A < 1e-8) return null;
+  const B = 2 * (fx * dx + fy * dy);
+  const C = fx * fx + fy * fy - r * r;
+  const disc = B * B - 4 * A * C;
+  if (disc < 0) return null;
+  const s = Math.sqrt(disc);
+  const ts = [(-B - s) / (2 * A), (-B + s) / (2 * A)].filter((t) => t >= -0.002 && t <= 1.002);
+  if (!ts.length) return null;
+  const t = hypot(a, sw) >= r ? Math.min(...ts) : Math.max(...ts);
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+export function trimRailToHubs(pts, switches) {
+  if (!pts || pts.length < 2 || !switches?.length) return pts;
+  const r = HUB_R - 0.4;
+  const inside = (p) => {
+    for (const sw of switches) if (hypot(p, sw) < r) return sw;
+    return null;
+  };
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const sw = inside(p);
+    const prev = i ? pts[i - 1] : null;
+    const prevSw = prev ? inside(prev) : null;
+    if (!sw) {
+      if (prevSw) {
+        const hit = hitCircle(prev, p, prevSw, HUB_R);
+        if (hit) out.push(hit);
+      }
+      out.push(p);
+    } else if (prev && !prevSw) {
+      const hit = hitCircle(prev, p, sw, HUB_R);
+      if (hit) out.push(hit);
+    }
+  }
+  return out.length >= 2 ? out : pts;
 }
 
 export function hubCenterline(sw, fromPort, toPort, steps = 24) {
