@@ -5,7 +5,7 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS, goalLine, goalShort, LAST_STAGE,
-} from './graph.js?v=34';
+} from './graph.js?v=35';
 import {
   HIT_R, HUB_R, trimRailToHubs,
   strokeCenterline, drawHub, drawBlade, drawPortsDebug,
@@ -896,13 +896,13 @@ function render() {
   if (!g) return;
   const switches = Object.values(g.nodes).filter((n) => n.kind === 'switch');
   for (const e of g.edges) strokeRail(trimRailToHubs(e.pts, switches), true);
-  for (const n of switches) drawHub(ctx, n);
-  for (const n of switches) drawBlade(ctx, n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);
   for (const s of g.sources) drawSource(s);
   for (const n of Object.values(g.nodes)) if (n.kind === 'station') drawStation(n);
   for (const tr of state.trains) drawLoco(tr);
   drawFx();
+  for (const n of switches) drawHub(ctx, n);
+  for (const n of switches) drawBlade(ctx, n);
   if (state.debug) {
     for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawPortsDebug(ctx, n);
     ctx.font = '700 9px monospace';
@@ -959,9 +959,9 @@ function step(dt) {
     tr.steam = (tr.steam || 0) - dt;
     if (tr.steam <= 0) {
       const p = trainPos(tr);
-      const nearHub = Object.values(state.graph.nodes).some((n) => n.kind === 'switch' && Math.hypot(p.x - n.x, p.y - n.y) < HUB_R + 18);
+      const nearHub = Object.values(state.graph.nodes).some((n) => n.kind === 'switch' && Math.hypot(p.x - n.x, p.y - n.y) < HIT_R);
       if (!nearHub) {
-        puff(p.x - Math.cos(p.ang) * 12, p.y - Math.sin(p.ang) * 12 - 3, 'rgba(238,243,228,0.8)');
+        puff(p.x - Math.cos(p.ang) * 16, p.y - Math.sin(p.ang) * 16 - 2, 'rgba(238,243,228,0.55)');
       }
       tr.steam = 0.2;
     }

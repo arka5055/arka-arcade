@@ -504,13 +504,13 @@ function layoutNine(nodes, edges, tokens, region) {
   const [pink, black, green, yellow, blue, violet, white, gk, pw] = tokens;
   const p = (x, y) => atPct(region, x, y);
   const j1 = mkSw('J:', '', ...xy(p(36, 50)), 'W', 'NE', 'SE');
-  const j0 = mkSw('J:0', '0', ...xy(p(52, 28)), 'SW', 'N', 'E');
+  const j0 = mkSw('J:0', '0', ...xy(p(52, 28)), 'SW', 'N', 'SE');
   const j00 = mkSw('J:00', '00', ...xy(p(66, 16)), 'SW', 'N', 'E');
   const j000 = mkSw('J:000', '000', ...xy(p(80, 8)), 'SW', 'N', 'E');
-  const j01 = mkSw('J:01', '01', ...xy(p(68, 42)), 'W', 'E', 'SE');
+  const j01 = mkSw('J:01', '01', ...xy(p(68, 42)), 'NW', 'E', 'SE');
   const jL = mkSw('J:1', '1', ...xy(p(52, 74)), 'NW', 'E', 'SE');
   const j10 = mkSw('J:10', '10', ...xy(p(76, 70)), 'W', 'NE', 'E');
-  const j11 = mkSw('J:11', '11', ...xy(p(70, 88)), 'NW', 'E', 'S');
+  const j11 = mkSw('J:11', '11', ...xy(p(70, 84)), 'NW', 'E', 'S');
   j1.sourceAt = p(5, 50);
   const st = (color, x, y, port) => ({
     id: `ST:${color}`, kind: 'station', color, ...p(x, y), port, pulse: 0, ports: {},
@@ -518,19 +518,19 @@ function layoutNine(nodes, edges, tokens, region) {
   const stP = st(pink, 80, 6, 'S');
   const stK = st(black, 90, 8, 'W');
   const stG = st(green, 86, 20, 'W');
-  const stY = st(yellow, 86, 38, 'W');
-  const stB = st(blue, 86, 48, 'W');
+  const stY = st(yellow, 86, 36, 'W');
+  const stB = st(blue, 86, 50, 'W');
   const stV = st(violet, 90, 62, 'W');
   const stW = st(white, 90, 70, 'W');
-  const stGK = st(gk, 88, 86, 'W');
-  const stPW = st(pw, 70, 97, 'N');
+  const stGK = st(gk, 88, 84, 'W');
+  const stPW = st(pw, 70, 93, 'N');
   for (const n of [j1, j0, j00, j000, j01, jL, j10, j11, stP, stK, stG, stY, stB, stV, stW, stGK, stPW]) {
     nodes[n.id] = n;
   }
   addCurve(edges, j1, 'NE', j0, 'SW');
   addCurve(edges, j1, 'SE', jL, 'NW');
   addCurve(edges, j0, 'N', j00, 'SW');
-  addEdge(edges, j0, 'E', j01, 'W');
+  addCurve(edges, j0, 'SE', j01, 'NW');
   addCurve(edges, j00, 'N', j000, 'SW');
   addEdge(edges, j00, 'E', stG, 'W');
   addEdge(edges, j000, 'N', stP, 'S');

@@ -1,4 +1,4 @@
-import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=34';
+import { buildStage, stageFor, PALETTE, tokenParts } from './graph.js?v=35';
 
 const thumbs = new Map();
 
