@@ -20,6 +20,7 @@
   <a class="arcade-home" href="/">ALL GAMES</a>
   <canvas id="game"></canvas>
   <div class="hud" id="hud">
+    <div class="chip stage"><b>STAGE</b><span id="hud-stage">1</span></div>
     <div class="chip quiet"><b>TIME</b><span id="hud-time">0:34</span></div>
     <div class="chip"><b>CORRECT</b><span id="hud-correct">0 of 6</span></div>
     <div class="chip"><b>GOAL</b><span id="hud-goal">5 of 6</span></div>
@@ -33,7 +34,7 @@
   <div class="overlay hidden" id="pause">
     <div class="card">
       <h1>Paused</h1>
-      <p class="hint">Switches stay as you left them.</p>
+      <p class="hint" id="pause-stage">Stage 1</p>
       <button class="play" id="btn-resume">RESUME</button>
       <button class="ghost" id="btn-new">STAGES</button>
       <a class="ghost home-link" href="/">ALL GAMES</a>
@@ -68,6 +69,6 @@
     <div class="stage-grid" id="stage-grid"></div>
   </div>
 
-  <script type="module" src="./game.js?v=29"></script>
+  <script type="module" src="./game.js?v=30"></script>
 </body>
 </html>

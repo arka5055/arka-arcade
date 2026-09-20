@@ -23,6 +23,7 @@ const ui = {
   time: document.getElementById('hud-time'),
   correct: document.getElementById('hud-correct'),
   goal: document.getElementById('hud-goal'),
+  stage: document.getElementById('hud-stage'),
   title: document.getElementById('title'),
   pause: document.getElementById('pause'),
   done: document.getElementById('done'),
@@ -499,7 +500,7 @@ function endRound(advanced) {
     persist();
   }
   ui.done.classList.remove('hidden');
-  document.getElementById('done-title').textContent = advanced ? `Level ${state.level} cleared` : 'Round over';
+  document.getElementById('done-title').textContent = advanced ? `Stage ${state.level} cleared` : `Stage ${state.level}`;
   document.getElementById('done-home').textContent = `${state.home} / ${state.quota}`;
   document.getElementById('done-miss').textContent = String(state.missed);
   document.getElementById('done-score').textContent = String(state.score);
@@ -655,6 +656,9 @@ function refreshHud() {
   ui.correct.textContent = `${state.home} of ${state.quota}`;
   ui.time.textContent = formatTime(Math.max(0, state.remaining));
   if (ui.goal && state.spec) ui.goal.textContent = goalLine(state.spec);
+  if (ui.stage) ui.stage.textContent = String(state.level);
+  const pauseStage = document.getElementById('pause-stage');
+  if (pauseStage) pauseStage.textContent = `Stage ${state.level}`;
 }
 
 function resize() {
