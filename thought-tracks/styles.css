@@ -278,6 +278,12 @@ a.home-link {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
+.stage-card .cleared-tag {
+  left: auto;
+  right: 14px;
+  background: #1f6b32;
+  color: #eef3e4;
+}
 .stage-card .status {
   display: inline-block;
   margin-top: 5px;

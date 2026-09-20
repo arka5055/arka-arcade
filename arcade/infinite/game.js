@@ -1,4 +1,5 @@
 import { onLeaveApp } from "/leave-pause.js";
+import { loadInfinite, saveInfinite } from "/progress.js?v=1";
 
 const LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -164,15 +165,14 @@ let locked = false;
 let scores = { you: 0, cpu: 0 };
 
 try {
-  const saved = JSON.parse(localStorage.getItem(SAVE) || "null");
+  const saved = loadInfinite();
   if (typeof saved?.you === "number") scores = { you: saved.you, cpu: saved.cpu || 0 };
-  else if (saved?.cpu?.you != null) scores = { you: saved.cpu.you, cpu: saved.cpu.cpu || 0 };
 } catch {
   /* keep defaults */
 }
 
 function persist() {
-  localStorage.setItem(SAVE, JSON.stringify(scores));
+  saveInfinite(scores);
 }
 
 let audioCtx = null;

@@ -1,4 +1,5 @@
 import { onLeaveApp, resumeAudio } from '/leave-pause.js';
+import { loadTracks, saveTracks } from '/progress.js?v=1';
 import {
   W, H, PALETTE,
   opposite, hypot, portPoint, houseOffset, polyLen, along,
@@ -14,7 +15,6 @@ import { thumbnail, stageMeta } from './stages.js?v=15';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const SAVE_KEY = 'thought-tracks-v14';
 const SPEED = 36;
 const TAP_COALESCE = 0.04;
 const DECISION_HORIZON = 2.5;
@@ -40,31 +40,31 @@ let cleared = {};
 let stagesReturn = 'play';
 let savedRung = 0;
 try {
-  const save = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+  const save = loadTracks();
   best = save.best || 0;
   muted = !!save.muted;
   unlocked = 16;
-  lastPlayed = Math.max(1, Math.min(16, save.last || save.level || 1));
-  records = save.records && typeof save.records === 'object' ? save.records : {};
+  lastPlayed = save.last || 1;
+  records = save.records || {};
   savedRung = save.rung || 0;
-  const fromSave = save.cleared && typeof save.cleared === 'object' ? save.cleared : {};
-  const fromBackup = JSON.parse(localStorage.getItem('thought-tracks-cleared-v1') || '[]');
-  cleared = {};
-  for (const [k, v] of Object.entries(fromSave)) if (v) cleared[String(k)] = true;
-  for (const [k, rec] of Object.entries(records)) if (rec?.cleared) cleared[String(k)] = true;
-  if (Array.isArray(fromBackup)) for (const n of fromBackup) cleared[String(n)] = true;
+  cleared = save.cleared || {};
 } catch {}
 
 function isCleared(level) {
   const k = String(level);
-  return !!(cleared[k] || cleared[level] || records[k]?.cleared || records[level]?.cleared);
+  return !!(cleared[k] || records[k]?.cleared);
 }
 
 function markCleared(level) {
   const k = String(level);
   cleared[k] = true;
-  const rec = records[k] || records[level] || {};
-  records[k] = { ...rec, cleared: true };
+  records[k] = { ...(records[k] || {}), cleared: true };
+}
+
+function persist() {
+  saveTracks({
+    best, muted, last: lastPlayed, rung: state.rung, records, cleared,
+  });
 }
 
 const state = {
@@ -93,16 +93,6 @@ const state = {
   lastLaunch: 0,
   lastPtr: null,
 };
-
-function persist() {
-  try {
-    const clearedList = Object.keys(cleared).filter((k) => cleared[k]).map(Number).sort((a, b) => a - b);
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
-      version: 16, best, muted, unlocked: 16, last: lastPlayed, rung: state.rung, records, cleared,
-    }));
-    localStorage.setItem('thought-tracks-cleared-v1', JSON.stringify(clearedList));
-  } catch {}
-}
 
 function unlockAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
@@ -466,20 +456,15 @@ function failWhy() {
 
 function endRound(advanced) {
   if (state.score > best) best = state.score;
-  const rec = records[state.level];
-  if (!rec || state.home > rec.home || (state.home === rec.home && state.score > (rec.score || 0))) {
-    records[state.level] = { home: state.home, quota: state.quota, score: state.score, cleared: !!(rec && rec.cleared) };
-  }
-  if (advanced) {
-    markCleared(state.level);
-    records[String(state.level)] = {
-      ...(records[String(state.level)] || records[state.level] || {}),
-      home: Math.max(state.home, records[state.level]?.home || records[String(state.level)]?.home || 0),
-      quota: state.quota,
-      score: Math.max(state.score, records[state.level]?.score || records[String(state.level)]?.score || 0),
-      cleared: true,
-    };
-  }
+  const k = String(state.level);
+  const prev = records[k] || {};
+  records[k] = {
+    home: Math.max(state.home, prev.home || 0),
+    quota: state.quota,
+    score: Math.max(state.score, prev.score || 0),
+    cleared: !!(prev.cleared || advanced),
+  };
+  if (advanced) markCleared(state.level);
   lastPlayed = state.level;
   persist();
   state.mode = 'done';
@@ -550,7 +535,7 @@ function renderStages() {
   ui.grid.replaceChildren();
   for (let level = 1; level <= 16; level++) {
     const meta = stageMeta(level);
-    const rec = records[level] || records[String(level)];
+    const rec = records[String(level)];
     const done = isCleared(level);
     const card = document.createElement('button');
     card.type = 'button';
@@ -562,6 +547,12 @@ function renderStages() {
     view.height = shot.height;
     view.getContext('2d').drawImage(shot, 0, 0);
     card.append(view);
+    if (done) {
+      const clearedTag = document.createElement('span');
+      clearedTag.className = 'tag cleared-tag';
+      clearedTag.textContent = 'CLEARED';
+      card.append(clearedTag);
+    }
     if (level === lastPlayed) {
       const tag = document.createElement('span');
       tag.className = 'tag';
@@ -1008,14 +999,17 @@ document.getElementById('btn-mute').addEventListener('click', () => {
 
 addEventListener('resize', resize);
 function pauseForLeave() {
+  persist();
   if (state.mode !== 'play') return;
   state.mode = 'pause';
   ui.pause.classList.remove('hidden');
 }
 onLeaveApp(pauseForLeave);
 addEventListener('visibilitychange', () => {
-  if (!document.hidden) resumeAudio(audioCtx);
+  if (document.hidden) persist();
+  else resumeAudio(audioCtx);
 });
+addEventListener('pagehide', persist);
 
 resize();
 refreshHud();

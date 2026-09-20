@@ -1,3 +1,5 @@
+import { summary } from "/progress.js?v=1";
+
 const LAST_KEY = "arka-arcade-last";
 
 function el(tag, attrs = {}, kids = []) {
@@ -20,6 +22,8 @@ function readJson(key) {
 }
 
 function scoreLine(game) {
+  const fromHub = summary(game.id);
+  if (fromHub) return fromHub;
   const spec = game.score;
   if (!spec) return "";
   try {

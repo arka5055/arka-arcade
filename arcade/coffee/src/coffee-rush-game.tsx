@@ -42,6 +42,18 @@ type Fulfill = {
 const SOUND_STORAGE_KEY = "coffee-rush-sound-v1";
 const BEST_STORAGE_KEY = "coffee-rush-best-v1";
 const STAGE_STORAGE_KEY = "coffee-rush-stage-v1";
+const HUB_KEY = "arka-arcade-progress-v1";
+
+function saveCoffeeHub(best: number, stage: number) {
+  try {
+    const hub = JSON.parse(window.localStorage.getItem(HUB_KEY) || "{}") as Record<string, unknown>;
+    hub.coffee = { best, stage, updated: Date.now() };
+    hub.updated = Date.now();
+    window.localStorage.setItem(HUB_KEY, JSON.stringify(hub));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 const emptyStation = (): Station => ({
   stage: "empty",
@@ -295,6 +307,7 @@ function CoffeeRushGame() {
       stageIdRef.current = unlocked;
       setStageId(unlocked);
       window.localStorage.setItem(STAGE_STORAGE_KEY, String(unlocked));
+      saveCoffeeHub(Number(window.localStorage.getItem(BEST_STORAGE_KEY) || 0), unlocked);
     }
     setComplete(true);
     setCoach(isQuotaMet(nextServed, quotaRef.current) ? "QUOTA HIT — SHIFT CLOSED." : "TIME. THE COUNTER IS CLOSED.");
@@ -379,6 +392,7 @@ function CoffeeRushGame() {
     if (complete && score > best) {
       setBest(score);
       window.localStorage.setItem(BEST_STORAGE_KEY, String(score));
+      saveCoffeeHub(score, stageIdRef.current);
     }
   }, [complete, score, best]);
 
