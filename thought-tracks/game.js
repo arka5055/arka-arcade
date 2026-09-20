@@ -74,6 +74,7 @@ const state = {
   rung: savedRung,
   recovery: 0,
   lastLaunch: 0,
+  lastPtr: null,
 };
 
 function persist() {
@@ -300,10 +301,33 @@ function spawnTrain() {
 function requestToggle(sw) {
   sw.prevArm = sw.arm;
   sw.arm = sw.arm ? 0 : 1;
-  sw.anim = 0;
-  sw.flash = 0.45;
+  sw.anim = 1;
+  sw.flash = 0.5;
   burst(sw.x, sw.y, '#e7f6d4', 10, { speed: 90, lift: 8, life: 0.22, r: 2.2 });
   beep(420, 0.04, 'square', 0.035);
+  retargetTrains(sw);
+}
+
+function retargetTrains(sw) {
+  for (const tr of state.trains) {
+    if (tr.edge?.hub && tr.edge.from?.nodeId === sw.id) {
+      const len = polyLen(tr.edge.pts) || 1;
+      if (tr.dist / len > 0.55) continue;
+      const t = tr.dist / len;
+      tr.committedArm = sw.arm;
+      tr.committedEdge = nextLiveEdge(state.graph, sw);
+      tr.hubPts = committedHub(sw);
+      tr.edge = { pts: tr.hubPts, hub: true, from: { nodeId: sw.id }, to: { nodeId: sw.id } };
+      tr.dist = t * (polyLen(tr.edge.pts) || 1);
+      continue;
+    }
+    const ahead = state.graph.nodes[tr.edge?.to.nodeId];
+    if (ahead === sw && !tr.edge?.hub) {
+      tr.committedEdge = null;
+      tr.hubPts = null;
+      tr.committedArm = null;
+    }
+  }
 }
 
 function toggleSwitchAt(p) {
@@ -358,12 +382,25 @@ function finishTrain(tr, station) {
 }
 
 function advanceTrain(tr, dt) {
+  if (tr.edge?.hub) {
+    const sw = state.graph.nodes[tr.edge.from.nodeId];
+    const len0 = polyLen(tr.edge.pts) || 1;
+    if (sw && tr.dist / len0 <= 0.55) {
+      const t = tr.dist / len0;
+      tr.committedArm = sw.arm;
+      tr.committedEdge = nextLiveEdge(state.graph, sw);
+      tr.hubPts = committedHub(sw);
+      tr.edge = { pts: tr.hubPts, hub: true, from: { nodeId: sw.id }, to: { nodeId: sw.id } };
+      tr.dist = t * (polyLen(tr.edge.pts) || 1);
+    }
+  }
   const nodeAhead = state.graph.nodes[tr.edge.to.nodeId];
-  const len = polyLen(tr.edge.pts);
   tr.dist += SPEED * dt;
+  const len = polyLen(tr.edge.pts);
   if (tr.dist < len) return;
   if (tr.edge.hub) {
-    tr.edge = tr.committedEdge;
+    const sw = state.graph.nodes[tr.edge.from.nodeId];
+    tr.edge = tr.committedEdge || nextLiveEdge(state.graph, sw);
     tr.dist = 0;
     tr.hubPts = null;
     tr.committedEdge = null;
@@ -893,10 +930,16 @@ function loop(now) {
 
 canvas.addEventListener('pointerdown', (ev) => {
   ev.preventDefault();
+  ev.stopPropagation();
   unlockAudio();
   if (state.mode !== 'play') return;
+  const now = performance.now();
+  if (ev.pointerType === 'mouse' && state.lastPtr && state.lastPtr.type !== 'mouse' && now - state.lastPtr.t < 800) return;
+  if (state.lastPtr && ev.pointerId !== state.lastPtr.id && now - state.lastPtr.t < 50) return;
+  state.lastPtr = { t: now, type: ev.pointerType, id: ev.pointerId };
   toggleSwitchAt(worldFromEvent(ev));
 }, { passive: false });
+canvas.addEventListener('click', (ev) => { ev.preventDefault(); }, { passive: false });
 
 function restartGame(ev) {
   ev?.preventDefault();
