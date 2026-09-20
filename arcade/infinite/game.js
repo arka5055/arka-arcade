@@ -153,7 +153,6 @@ if (boardEl) {
   const turnEl = document.getElementById("turn");
   const hintEl = document.getElementById("hint");
   const scoreEl = document.getElementById("score");
-  const titleEl = document.getElementById("title");
   const doneEl = document.getElementById("done");
   const doneTitle = document.getElementById("done-title");
   const doneCopy = document.getElementById("done-copy");
@@ -273,7 +272,6 @@ function play(cell) {
 function start() {
   state = emptyState();
   locked = false;
-  titleEl.classList.add("hidden");
   doneEl.classList.add("hidden");
   render();
 }
@@ -288,14 +286,8 @@ for (let i = 0; i < 9; i += 1) {
   boardEl.append(cell);
 }
 
-document.getElementById("btn-play").addEventListener("click", start);
 document.getElementById("btn-again").addEventListener("click", start);
-document.getElementById("btn-new").addEventListener("click", () => {
-  doneEl.classList.add("hidden");
-  titleEl.classList.remove("hidden");
-  state = emptyState();
-  render();
-});
+document.getElementById("btn-new").addEventListener("click", start);
 
-render();
+start();
 }
