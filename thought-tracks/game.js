@@ -3,7 +3,7 @@ import {
   opposite, hypot, portPoint, houseOffset, polyLen, along,
   buildStage, validateStage, liveEdge, nextLiveEdge,
   tokenParts, tokenLabel, stageFor, L14_RUNGS,
-} from './graph.js?v=6';
+} from './graph.js?v=7';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -442,34 +442,40 @@ function strokeRail(pts, live) {
 
 function drawInner(sw) {
   const t = Math.min(1, sw.anim ?? 1);
-  const a0 = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.out0];
-  const a1 = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.out1];
-  const ain = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 }[sw.inPort];
+  const ang = { W: Math.PI, E: 0, N: -Math.PI / 2, S: Math.PI / 2 };
+  const a0 = ang[sw.out0];
+  const a1 = ang[sw.out1];
+  const ain = ang[sw.inPort];
   const fromA = sw.arm ? a1 : a0;
   const prevA = sw.prevArm ? a1 : a0;
   let d = fromA - prevA;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   const a = prevA + d * t;
-  const x0 = sw.x + Math.cos(ain) * (HUB_R - 1);
-  const y0 = sw.y + Math.sin(ain) * (HUB_R - 1);
-  const x1 = sw.x + Math.cos(a) * (HUB_R - 1);
-  const y1 = sw.y + Math.sin(a) * (HUB_R - 1);
+  const xIn = sw.x + Math.cos(ain) * HUB_R;
+  const yIn = sw.y + Math.sin(ain) * HUB_R;
+  const xOut = sw.x + Math.cos(a) * HUB_R;
+  const yOut = sw.y + Math.sin(a) * HUB_R;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(sw.x, sw.y, HUB_R - 0.5, 0, Math.PI * 2);
+  ctx.arc(sw.x, sw.y, HUB_R - 1, 0, Math.PI * 2);
   ctx.clip();
-  ctx.lineCap = 'butt';
+  ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#e7ead8';
-  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#eef3e0';
+  ctx.lineWidth = 11;
   ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.quadraticCurveTo(sw.x, sw.y, x1, y1);
+  ctx.moveTo(xIn, yIn);
+  ctx.lineTo(sw.x, sw.y);
+  ctx.lineTo(xOut, yOut);
   ctx.stroke();
-  ctx.strokeStyle = '#2a3424';
-  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = '#1e2818';
+  ctx.lineWidth = 3.6;
   ctx.stroke();
+  ctx.fillStyle = '#eef3e0';
+  ctx.beginPath();
+  ctx.arc(sw.x, sw.y, 4.2, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -639,13 +645,23 @@ function render() {
     if (n.kind !== 'switch') continue;
     ctx.beginPath();
     ctx.arc(n.x, n.y, HUB_R + (n.flash || 0) * 6, 0, Math.PI * 2);
-    ctx.fillStyle = switchCommitted(n) ? '#4a7344' : '#5b9648';
+    ctx.fillStyle = '#3d6b38';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(238,243,228,0.55)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(238,243,228,0.7)';
+    ctx.lineWidth = 2.4;
     ctx.stroke();
   }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-2, -2, W + 4, H + 4);
+  for (const n of Object.values(g.nodes)) {
+    if (n.kind !== 'switch') continue;
+    ctx.moveTo(n.x + HUB_R, n.y);
+    ctx.arc(n.x, n.y, HUB_R - 0.6, 0, Math.PI * 2, true);
+  }
+  ctx.clip('evenodd');
   for (const e of g.edges) strokeRail(e.pts, true);
+  ctx.restore();
   for (const n of Object.values(g.nodes)) if (n.kind === 'switch') drawInner(n);
   for (const n of Object.values(g.nodes)) if (n.kind === 'merge') drawMerge(n);
   for (const s of g.sources) drawSource(s);

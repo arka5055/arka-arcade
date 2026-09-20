@@ -2,7 +2,7 @@ export const W = 390;
 export const H = 844;
 export const HUB_R = 22;
 export const MERGE_R = 12;
-export const PORT_R = { switch: HUB_R, merge: MERGE_R, station: 0, source: 0 };
+export const PORT_R = { switch: 0, merge: MERGE_R, station: 0, source: 0 };
 export const PALETTE = {
   P: '#d46a9a', K: '#1c1c1c', G: '#3d8f44', Y: '#d4a017',
   B: '#3d8eb8', V: '#6b4f8a', W: '#e8eadc',
@@ -216,7 +216,7 @@ function layoutPrefix(prefix, region, inDir, nodes, edges, codes) {
   };
   if (inDir === 'N') { sw.x = (region.x0 + region.x1) / 2; sw.y = region.y0 + 26; }
   else if (inDir === 'S') { sw.x = (region.x0 + region.x1) / 2; sw.y = region.y1 - 26; }
-  else if (inDir === 'W') { sw.x = region.x0 + 26; sw.y = (region.y0 + region.y1) / 2; }
+  else if (inDir === 'W') { sw.x = region.x0 + (prefix === '' ? 118 : 26); sw.y = (region.y0 + region.y1) / 2; }
   else { sw.x = region.x1 - 26; sw.y = (region.y0 + region.y1) / 2; }
   nodes[sw.id] = sw;
   const n0 = leafCount(codes, `${prefix}0`);
@@ -238,25 +238,25 @@ function mkSw(id, prefix, x, y, inPort, out0, out1) {
 }
 function layoutTwo(nodes, edges, tokens, region) {
   const [pink, black] = tokens;
-  const j = mkSw('J:', '', 118, 430, 'W', 'E', 'S');
+  const j = mkSw('J:', '', 186, 428, 'W', 'N', 'S');
   const stP = {
     id: `ST:${pink}`, kind: 'station', color: pink,
-    x: j.x + 52, y: region.y0 + 56, port: 'S', pulse: 0, ports: {},
+    x: j.x, y: region.y0 + 58, port: 'S', pulse: 0, ports: {},
   };
   const stK = {
     id: `ST:${black}`, kind: 'station', color: black,
-    x: region.x1 - 32, y: region.y1 - 80, port: 'N', pulse: 0, ports: {},
+    x: region.x1 - 28, y: region.y1 - 72, port: 'N', pulse: 0, ports: {},
   };
   nodes[j.id] = j;
   nodes[stP.id] = stP;
   nodes[stK.id] = stK;
-  addEdge(edges, j, 'E', stP, 'S');
+  addEdge(edges, j, 'N', stP, 'S');
   addEdge(edges, j, 'S', stK, 'N');
   return j;
 }
 function layoutThree(nodes, edges, tokens, region) {
   const [a, b, c] = tokens;
-  const j1 = mkSw('J:', '', region.x0 + 36, (region.y0 + region.y1) / 2, 'W', 'N', 'S');
+  const j1 = mkSw('J:', '', 186, (region.y0 + region.y1) / 2, 'W', 'N', 'S');
   const j2 = mkSw('J:1', '1', region.x0 + 160, region.y1 - 120, 'N', 'W', 'E');
   const stA = { id: `ST:${a}`, kind: 'station', color: a, x: j1.x, y: region.y0 + 48, port: 'S', pulse: 0, ports: {} };
   const stB = { id: `ST:${b}`, kind: 'station', color: b, x: j2.x - 100, y: j2.y, port: 'E', pulse: 0, ports: {} };
@@ -281,8 +281,8 @@ export function buildStage(level, rung = 0) {
       : layoutPrefix('', region, 'W', nodes, edges, spec.codes);
   const src = {
     id: spec.sources[0].id, kind: 'source', side: 'W', packet: spec.tokens.slice(),
-    x: root.x + DIR[root.inPort][0] * 58,
-    y: root.y + DIR[root.inPort][1] * 58,
+    x: root.inPort === 'W' ? 30 : root.x + DIR[root.inPort][0] * 120,
+    y: root.inPort === 'W' ? root.y : root.y + DIR[root.inPort][1] * 120,
     port: opposite(root.inPort),
     ports: {},
   };
