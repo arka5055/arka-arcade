@@ -10,7 +10,7 @@ Add a game by editing **one file**, then dropping a folder.
 2. Add a cover at `arcade/media/<id>.jpg`.
 3. Add an entry to [`games.json`](games.json).
 
-The launcher, local server, and publish routes all read `games.json`. You do not edit `index.html` cards or Vercel rewrites.
+The launcher reads `games.json`, shows every title in a 2×2 grid that fits an iPhone, and pulls **best scores** from each game’s `localStorage` key (declared on the catalog entry). Last played becomes a Continue bar. ALL GAMES on every title returns here.
 
 If the game source lives outside `arcade/<id>/` (Thought Tracks does), set `"root"` to that folder. The build copies it to `/<id>/`.
 

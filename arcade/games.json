@@ -1,7 +1,7 @@
 {
   "studio": "ARKA",
   "product": "Arcade",
-  "tagline": "Every game here is from the same studio, to the same bar: iPhone-first, tactile, and finished.",
+  "tagline": "Tap a game. Best scores stay here.",
   "games": [
     {
       "id": "coffee",
@@ -11,7 +11,8 @@
       "path": "/coffee/",
       "root": "arcade/coffee",
       "cover": "/media/coffee.jpg",
-      "tone": "#083d42"
+      "tone": "#083d42",
+      "score": { "key": "coffee-rush-best-v1", "kind": "number", "label": "Best" }
     },
     {
       "id": "skyline",
@@ -21,7 +22,8 @@
       "path": "/skyline/",
       "root": "arcade/skyline",
       "cover": "/media/skyline.jpg",
-      "tone": "#0a1822"
+      "tone": "#0a1822",
+      "score": { "key": "@skyline_signal_stats_v1", "kind": "json", "field": "highScore", "label": "Best" }
     },
     {
       "id": "tracks",
@@ -31,7 +33,8 @@
       "path": "/tracks/",
       "root": "thought-tracks",
       "cover": "/media/tracks.jpg",
-      "tone": "#182318"
+      "tone": "#182318",
+      "score": { "key": "thought-tracks-v12", "kind": "json", "field": "best", "label": "Best" }
     },
     {
       "id": "infinite",
@@ -41,7 +44,8 @@
       "path": "/infinite/",
       "root": "arcade/infinite",
       "cover": "/media/infinite.jpg",
-      "tone": "#16131a"
+      "tone": "#16131a",
+      "score": { "key": "arcade-infinite-v1", "kind": "vs", "you": "you", "them": "cpu", "label": "Record" }
     }
   ]
 }
