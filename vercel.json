@@ -14,15 +14,15 @@
       "destination": "/tracks/:path*"
     },
     {
-      "source": "/drops/:path*",
-      "destination": "/drops/:path*"
+      "source": "/ghost/:path*",
+      "destination": "/ghost/:path*"
     },
     {
       "source": "/infinite/:path*",
       "destination": "/infinite/:path*"
     },
     {
-      "source": "/((?!coffee/|skyline/|tracks/|drops/|infinite/|__grok/).*)",
+      "source": "/((?!coffee/|skyline/|tracks/|ghost/|drops/|infinite/|__grok/).*)",
       "destination": "/index.html"
     }
   ],

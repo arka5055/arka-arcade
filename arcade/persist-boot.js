@@ -77,6 +77,31 @@
       level: Math.max(a.level || 0, b.level || 0),
     };
   }
+  function mergeGhost(a, b) {
+    a = a || {}; b = b || {};
+    var records = Object.assign({}, a.records || {});
+    Object.keys(b.records || {}).forEach(function (k) {
+      var x = records[k] || {};
+      var y = b.records[k] || {};
+      records[k] = {
+        home: Math.max(x.home || 0, y.home || 0),
+        quota: y.quota || x.quota || 0,
+        score: Math.max(x.score || 0, y.score || 0),
+        span: Math.max(x.span || 0, y.span || 0),
+        cleared: !!(x.cleared || y.cleared),
+      };
+    });
+    var cleared = Object.assign({}, a.cleared || {}, b.cleared || {});
+    Object.keys(records).forEach(function (k) { if (records[k].cleared) cleared[k] = true; });
+    return {
+      best: Math.max(a.best || 0, b.best || 0),
+      muted: !!(b.muted != null ? b.muted : a.muted),
+      last: b.last || a.last || 1,
+      unlocked: Math.max(1, a.unlocked || 1, b.unlocked || 1),
+      records: records,
+      cleared: cleared,
+    };
+  }
   function mergeHub(a, b) {
     a = a && typeof a === 'object' ? a : {};
     b = b && typeof b === 'object' ? b : {};
@@ -86,6 +111,7 @@
       skyline: mergeSkyline(a.skyline, b.skyline),
       infinite: mergeInfinite(a.infinite, b.infinite),
       drops: mergeDrops(a.drops, b.drops),
+      ghost: mergeGhost(a.ghost, b.ghost),
       last: b.last || a.last || null,
       updated: Date.now(),
     };
@@ -108,6 +134,8 @@
     if (inf) hub.infinite = { you: Number(inf.you) || 0, cpu: Number(inf.cpu) || 0 };
     var drops = parse(lsGet('arcade-drops-v1'));
     if (drops) hub.drops = { best: Number(drops.best) || 0, last: Number(drops.last) || 0, level: Number(drops.level) || 0 };
+    var ghost = parse(lsGet('arcade-ghost-v1'));
+    if (ghost) hub.ghost = ghost;
     var sky = parse(lsGet('@skyline_signal_stats_v1'));
     if (sky) {
       hub.skyline = {
@@ -137,6 +165,7 @@
     }
     if (hub.infinite) lsSet('arcade-infinite-v1', JSON.stringify(hub.infinite));
     if (hub.drops) lsSet('arcade-drops-v1', JSON.stringify(hub.drops));
+    if (hub.ghost) lsSet('arcade-ghost-v1', JSON.stringify(hub.ghost));
     if (hub.skyline) {
       var sky = hub.skyline.stats ? Object.assign({}, hub.skyline.stats) : {};
       sky.highScore = Math.max(Number(sky.highScore) || 0, hub.skyline.best || 0);

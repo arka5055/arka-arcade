@@ -10,6 +10,7 @@ One studio. One repo. One launcher.
 | Coffee Rush | `/coffee/` |
 | Skyline Signal | `/skyline/` |
 | Thought Tracks | `/tracks/` |
+| Ghost Tracks | `/ghost/` |
 | Math Drop | `/drops/` |
 | Infinite Tic Tac Toe | `/infinite/` |
 

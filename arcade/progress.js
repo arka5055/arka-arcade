@@ -63,6 +63,7 @@ function mergeRecords(a = {}, b = {}) {
       home: Math.max(old.home || 0, rec.home || 0),
       quota: rec.quota || old.quota || 0,
       score: Math.max(old.score || 0, rec.score || 0),
+      span: Math.max(old.span || 0, rec.span || 0),
       cleared: !!(old.cleared || rec.cleared),
     };
   }
@@ -112,6 +113,22 @@ function mergeInfinite(a = {}, b = {}) {
   };
 }
 
+function mergeGhost(a = {}, b = {}) {
+  const records = mergeRecords(a.records, b.records);
+  const cleared = {};
+  addCleared(cleared, a.cleared);
+  addCleared(cleared, b.cleared);
+  for (const [k, rec] of Object.entries(records)) if (rec?.cleared) cleared[String(k)] = true;
+  return {
+    best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
+    muted: !!(b.muted ?? a.muted),
+    last: b.last || a.last || 1,
+    unlocked: Math.max(1, Number(a.unlocked) || 1, Number(b.unlocked) || 1),
+    records,
+    cleared,
+  };
+}
+
 function mergeDrops(a = {}, b = {}) {
   return {
     best: Math.max(Number(a.best) || 0, Number(b.best) || 0),
@@ -127,6 +144,7 @@ function mergeHub(a = {}, b = {}) {
     skyline: mergeSkyline(a.skyline, b.skyline),
     infinite: mergeInfinite(a.infinite, b.infinite),
     drops: mergeDrops(a.drops, b.drops),
+    ghost: mergeGhost(a.ghost, b.ghost),
     last: b.last || a.last || null,
     updated: Date.now(),
   };
@@ -261,6 +279,18 @@ export function saveDrops(data) {
   write('arcade-drops-v1', payload);
 }
 
+export function loadGhost() {
+  const h = hub().ghost || {};
+  const legacy = read('arcade-ghost-v1') || {};
+  return mergeGhost(legacy, h);
+}
+
+export function saveGhost(data) {
+  const payload = mergeGhost(loadGhost(), data);
+  saveHub({ ghost: payload });
+  write('arcade-ghost-v1', payload);
+}
+
 export function scoreBits(id) {
   if (id === 'tracks') {
     const t = loadTracks();
@@ -307,6 +337,16 @@ export function scoreBits(id) {
       value: d.best || 0,
       display: d.best ? String(d.best) : '—',
       note: d.level ? `Level ${d.level}` : '',
+    };
+  }
+  if (id === 'ghost') {
+    const g = loadGhost();
+    const n = Object.keys(g.cleared || {}).length;
+    return {
+      label: 'Span',
+      value: g.best || 0,
+      display: g.best ? String(g.best) : '—',
+      note: n ? `${n}/9 cleared` : '',
     };
   }
   return { label: 'Best', value: 0, display: '—', note: '' };

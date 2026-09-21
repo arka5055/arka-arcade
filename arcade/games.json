@@ -48,6 +48,17 @@
       "score": { "key": "arcade-drops-v1", "kind": "json", "field": "best", "label": "Best" }
     },
     {
+      "id": "ghost",
+      "title": "Ghost Tracks",
+      "kind": "Working memory",
+      "blurb": "Study the switches, then route from what you still hold. Memory is the tool, not the test.",
+      "path": "/ghost/",
+      "root": "arcade/ghost",
+      "cover": "/media/ghost.jpg",
+      "tone": "#24301c",
+      "score": { "key": "arcade-ghost-v1", "kind": "json", "field": "best", "label": "Span" }
+    },
+    {
       "id": "infinite",
       "title": "Infinite Tic Tac Toe",
       "kind": "Vanishing marks",
